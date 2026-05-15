@@ -81,6 +81,8 @@ fun CreateClubScreen(
     var isPublic by remember { mutableStateOf(false) } // Padrão Privado
     var maxMembers by remember { mutableStateOf(10) }
     var description by remember { mutableStateOf("") }
+    var preferredGenresText by remember { mutableStateOf("") }
+    var preferredTagsText by remember { mutableStateOf("") }
     var showHelpDialog by remember { mutableStateOf(false) }
 
     // ✅ OBSERVANDO O VIEWMODEL
@@ -180,12 +182,40 @@ fun CreateClubScreen(
                     },
                     enabled = !isLoading
                 )
+
+                Spacer(modifier = Modifier.height(24.dp))
+                OutlinedTextField(
+                    value = preferredGenresText,
+                    onValueChange = { preferredGenresText = it },
+                    label = { Text("Gêneros preferidos") },
+                    placeholder = { Text("Fantasia, Ficção Científica") },
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = !isLoading
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                OutlinedTextField(
+                    value = preferredTagsText,
+                    onValueChange = { preferredTagsText = it },
+                    label = { Text("Tags do clube") },
+                    placeholder = { Text("medieval, aventura, político") },
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = !isLoading
+                )
+
                 Spacer(modifier = Modifier.height(32.dp))
 
                 // ✅ BOTÃO CONECTADO AO VIEWMODEL
                 Button(
                     onClick = {
-                        viewModel.createClub(clubName, description, isPublic, maxMembers, imageUri)
+                        viewModel.createClub(
+                            name = clubName,
+                            description = description,
+                            isPublic = isPublic,
+                            maxMembers = maxMembers,
+                            preferredGenres = preferredGenresText.split(",").map { it.trim() }.filter { it.isNotBlank() },
+                            preferredTags = preferredTagsText.split(",").map { it.trim() }.filter { it.isNotBlank() },
+                            imageUri = imageUri
+                        )
                     },
                     modifier = Modifier.fillMaxWidth().height(50.dp),
                     shape = RoundedCornerShape(12.dp),

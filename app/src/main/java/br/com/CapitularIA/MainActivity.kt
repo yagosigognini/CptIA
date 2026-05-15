@@ -261,8 +261,8 @@ fun AppNavigation(
                 EditProfileScreen(
                     currentUser = user,
                     updateStatus = updateStatus,
-                    onSaveClick = { name, aboutMe, newImageUri ->
-                        profileViewModel.updateUserProfile(name, aboutMe, newImageUri)
+                    onSaveClick = { name, aboutMe, favoriteGenres, favoriteAuthors, newImageUri ->
+                        profileViewModel.updateUserProfile(name, aboutMe, favoriteGenres, favoriteAuthors, newImageUri)
                     },
                     onBackClick = { navController.popBackStack() }
                 )
