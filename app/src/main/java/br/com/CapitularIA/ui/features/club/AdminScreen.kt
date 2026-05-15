@@ -65,6 +65,7 @@ fun AdminScreen(
         onApprove = { request -> viewModel.approveRequest(request.userId) },
         onDeny = { request -> viewModel.denyRequest(request.userId) },
         onKick = { member -> viewModel.kickMember(member.uid) },
+        onTransferAdmin = { member -> viewModel.transferAdmin(member.uid) },
         onLeaveClub = onLeaveClub,
         onDrawUser = onDrawUser,
         onEditClub = onEditClub,
@@ -86,6 +87,7 @@ fun AdminScreenContent(
     onApprove: (JoinRequest) -> Unit,
     onDeny: (JoinRequest) -> Unit,
     onKick: (User) -> Unit,
+    onTransferAdmin: (User) -> Unit,
     onLeaveClub: () -> Unit,
     onDrawUser: () -> Unit,
     onEditClub: () -> Unit,
@@ -129,12 +131,12 @@ fun AdminScreenContent(
                 if (isAdmin) {
                     when (selectedTabIndex) {
                         0 -> RequestsTab(requests, isLoadingRequests, onApprove, onDeny, onProfileClick) // ✅ ATUALIZADO
-                        1 -> MembersTab(members, isLoadingMembers, club?.adminId, isAdmin, onKick, onProfileClick) // ✅ ATUALIZADO
+                        1 -> MembersTab(members, isLoadingMembers, club?.adminId, isAdmin, onKick, onTransferAdmin, onProfileClick) // ✅ ATUALIZADO
                         2 -> ConfigTab(club, true, viewModel(), onLeaveClub, onDrawUser, onEditClub)
                     }
                 } else {
                     when (selectedTabIndex) {
-                        0 -> MembersTab(members, isLoadingMembers, club?.adminId, isAdmin, onKick, onProfileClick) // ✅ ATUALIZADO
+                        0 -> MembersTab(members, isLoadingMembers, club?.adminId, isAdmin, onKick, onTransferAdmin, onProfileClick) // ✅ ATUALIZADO
                         1 -> ConfigTab(club, false, viewModel(), onLeaveClub, onDrawUser, onEditClub)
                     }
                 }
@@ -184,6 +186,7 @@ fun MembersTab(
     adminId: String?,
     currentUserIsAdmin: Boolean,
     onKick: (User) -> Unit,
+    onTransferAdmin: (User) -> Unit,
     onProfileClick: (String) -> Unit // ✅ ADICIONADO
 ) {
     if (isLoading) {
@@ -201,6 +204,7 @@ fun MembersTab(
                     isThisMemberAdmin = user.uid == adminId,
                     currentUserIsAdmin = currentUserIsAdmin,
                     onKick = { onKick(user) },
+                    onTransferAdmin = { onTransferAdmin(user) },
                     onProfileClick = { onProfileClick(user.uid) } // ✅ ATUALIZADO
                 )
             }
@@ -368,6 +372,7 @@ fun MemberItem(
     isThisMemberAdmin: Boolean,
     currentUserIsAdmin: Boolean,
     onKick: () -> Unit,
+    onTransferAdmin: () -> Unit,
     onProfileClick: () -> Unit // ✅ ADICIONADO
 ) {
     Card(
@@ -397,8 +402,13 @@ fun MemberItem(
             }
 
             if (currentUserIsAdmin && !isThisMemberAdmin) {
-                TextButton(onClick = onKick) {
-                    Text("Expulsar", color = MaterialTheme.colorScheme.error)
+                Column(horizontalAlignment = Alignment.End) {
+                    TextButton(onClick = onTransferAdmin) {
+                        Text("Tornar admin")
+                    }
+                    TextButton(onClick = onKick) {
+                        Text("Expulsar", color = MaterialTheme.colorScheme.error)
+                    }
                 }
             }
         }
@@ -431,6 +441,7 @@ fun AdminScreenPreview() {
             onApprove = {},
             onDeny = {},
             onKick = {},
+            onTransferAdmin = {},
             onLeaveClub = {},
             onDrawUser = {},
             onEditClub = {},

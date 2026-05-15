@@ -37,7 +37,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         // ✅ Pega o nosso link direto (URI) do payload de DADOS
         // O nome da chave ("deep_link_uri") deve ser EXATAMENTE o mesmo
         // que vamos usar na Cloud Function.
-        val deepLinkUri = data["deep_link_uri"]
+        val deepLinkUri = data["deep_link_uri"] ?: buildDeepLinkFromData(data)
 
         Log.d(tag, "Notificação recebida: Title='$title', Body='$body', DeepLink='$deepLinkUri'")
 

@@ -7,6 +7,9 @@ import androidx.activity.compose.setContent
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
@@ -48,6 +51,7 @@ import br.com.CapitularIA.ui.features.booksearch.BookSearchScreen
 import br.com.CapitularIA.ui.features.searchuser.SearchUserScreen
 import br.com.CapitularIA.ui.features.settings.TermsAndPoliciesScreen
 import br.com.CapitularIA.ui.theme.CapitularIATheme
+import br.com.CapitularIA.ui.theme.AppThemeMode
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.ktx.Firebase
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -68,13 +72,26 @@ class MainActivity : ComponentActivity() {
         installSplashScreen()
 
         setContent {
-            CapitularIATheme {
+            val prefs = remember { getSharedPreferences("app_settings", MODE_PRIVATE) }
+            var appThemeMode by remember { mutableStateOf(AppThemeMode.fromStorage(prefs.getString("theme_mode", AppThemeMode.SYSTEM.storageValue))) }
+            val isDarkTheme = when (appThemeMode) {
+                AppThemeMode.SYSTEM -> androidx.compose.foundation.isSystemInDarkTheme()
+                AppThemeMode.LIGHT -> false
+                AppThemeMode.DARK -> true
+            }
+
+            CapitularIATheme(darkTheme = isDarkTheme) {
                 navController = rememberNavController()
                 // Passa o ID do clube da notificação (se houver) para a navegação
                 val clubIdFromNotification = intent.getStringExtra("clubId")
                 AppNavigation(
                     navController = navController,
-                    clubIdFromNotification = clubIdFromNotification
+                    clubIdFromNotification = clubIdFromNotification,
+                    appThemeMode = appThemeMode,
+                    onThemeModeChange = { mode ->
+                        appThemeMode = mode
+                        prefs.edit().putString("theme_mode", mode.storageValue).apply()
+                    }
                 )
             }
         }
@@ -94,7 +111,9 @@ const val BOOK_SEARCH_RESULT_KEY = "selected_book"
 @Composable
 fun AppNavigation(
     navController: NavHostController,
-    clubIdFromNotification: String? = null // ✅ Recebe o ID da notificação
+    clubIdFromNotification: String? = null,
+    appThemeMode: AppThemeMode,
+    onThemeModeChange: (AppThemeMode) -> Unit
 ) {
     val authViewModel: AuthViewModel = viewModel()
 
@@ -292,6 +311,8 @@ fun AppNavigation(
             }
 
             SettingsScreen(
+                currentThemeMode = appThemeMode,
+                onThemeModeChange = onThemeModeChange,
                 viewModel = settingsViewModel,
                 onBackClick = { navController.popBackStack() },
                 onLogoutClick = {

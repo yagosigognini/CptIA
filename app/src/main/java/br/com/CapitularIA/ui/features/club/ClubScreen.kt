@@ -405,7 +405,7 @@ fun ClubHeader(
             text = club?.name ?: "Carregando...",
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold,
-            color = Color.White,
+            color = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier
                 .align(Alignment.BottomStart)
                 .padding(16.dp)
@@ -746,7 +746,7 @@ private fun ClubPreferencesSection(club: BookClub) {
             Text(
                 text = "Gêneros: ${club.preferredGenres.joinToString(" • ")}",
                 style = MaterialTheme.typography.bodySmall,
-                color = Color.White
+                color = MaterialTheme.colorScheme.onSurface
             )
         }
         if (club.preferredTags.isNotEmpty()) {
@@ -754,7 +754,7 @@ private fun ClubPreferencesSection(club: BookClub) {
             Text(
                 text = "Tags: ${club.preferredTags.joinToString(" • ")}",
                 style = MaterialTheme.typography.bodySmall,
-                color = Color.White
+                color = MaterialTheme.colorScheme.onSurface
             )
         }
     }
