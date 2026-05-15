@@ -28,11 +28,14 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import br.com.CapitularIA.ui.components.AppBackground
 import br.com.CapitularIA.ui.theme.CapitularIATheme
+import br.com.CapitularIA.ui.theme.AppThemeMode
 import br.com.CapitularIA.R
 
 // --- TELA "INTELIGENTE" (STATEFUL) ---
 @Composable
 fun SettingsScreen(
+    currentThemeMode: AppThemeMode,
+    onThemeModeChange: (AppThemeMode) -> Unit,
     viewModel: SettingsViewModel = viewModel(),
     onBackClick: () -> Unit,
     onLogoutClick: () -> Unit,
@@ -67,7 +70,9 @@ fun SettingsScreen(
         },
         onTermsClick = onTermsClick,
         onLogoutClick = onLogoutClick,
-        onDeleteAccountClick = { showDeleteDialog = true }
+        onDeleteAccountClick = { showDeleteDialog = true },
+        currentThemeMode = currentThemeMode,
+        onThemeModeChange = onThemeModeChange
     )
 }
 
@@ -76,6 +81,8 @@ fun SettingsScreen(
 @Composable
 fun SettingsScreenContent(
     userEmail: String,
+    currentThemeMode: AppThemeMode,
+    onThemeModeChange: (AppThemeMode) -> Unit,
     onBackClick: () -> Unit,
     onPasswordResetClick: () -> Unit,
     onFeedbackClick: () -> Unit,
@@ -117,7 +124,7 @@ fun SettingsScreenContent(
                 // Seção de Preferências
                 Text("Preferências", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(modifier = Modifier.height(8.dp))
-                InfoRow(label = "Tema", value = "Padrão do Sistema")
+                ThemeSelectorRow(currentThemeMode = currentThemeMode, onThemeModeChange = onThemeModeChange)
 
                 Spacer(modifier = Modifier.height(24.dp))
 
@@ -227,7 +234,9 @@ fun SettingsScreenPreview() {
             onBackClick = {}, onPasswordResetClick = {},
             onFeedbackClick = {},
             onTermsClick = {}, onLogoutClick = {},
-            onDeleteAccountClick = {}
+            onDeleteAccountClick = {},
+            currentThemeMode = AppThemeMode.SYSTEM,
+            onThemeModeChange = {}
         )
     }
 }
@@ -293,4 +302,27 @@ fun TermsAndPoliciesScreen(
             }
         }
     }
+}
+
+@Composable
+private fun ThemeSelectorRow(currentThemeMode: AppThemeMode, onThemeModeChange: (AppThemeMode) -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+    val label = when (currentThemeMode) {
+        AppThemeMode.SYSTEM -> "Padrão do sistema"
+        AppThemeMode.LIGHT -> "Claro"
+        AppThemeMode.DARK -> "Escuro"
+    }
+
+    Row(Modifier.fillMaxWidth().padding(vertical = 16.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+        Text("Tema", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Box {
+            TextButton(onClick = { expanded = true }) { Text(label) }
+            DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                DropdownMenuItem(text = { Text("Padrão do sistema") }, onClick = { onThemeModeChange(AppThemeMode.SYSTEM); expanded = false })
+                DropdownMenuItem(text = { Text("Claro") }, onClick = { onThemeModeChange(AppThemeMode.LIGHT); expanded = false })
+                DropdownMenuItem(text = { Text("Escuro") }, onClick = { onThemeModeChange(AppThemeMode.DARK); expanded = false })
+            }
+        }
+    }
+    HorizontalDivider()
 }

@@ -211,6 +211,11 @@ fun ClubScreenContent(
                     onAdminClick = onAdminClick // Passa a função de admin
                 )
 
+
+                if (club != null) {
+                    ClubPreferencesSection(club = club)
+                }
+
                 // Painel de Ações (Sorteio/Indicação) - Mostrado apenas se for membro
                 if (club != null && !accessDenied) {
                     ActionPanel(
@@ -400,7 +405,7 @@ fun ClubHeader(
             text = club?.name ?: "Carregando...",
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold,
-            color = Color.White,
+            color = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier
                 .align(Alignment.BottomStart)
                 .padding(16.dp)
@@ -724,5 +729,33 @@ fun ClubScreenContentPreview() {
             onToggleQuickMenu = {},
             onQuickActionClick = {}
         )
+    }
+}
+
+
+@Composable
+private fun ClubPreferencesSection(club: BookClub) {
+    if (club.preferredGenres.isEmpty() && club.preferredTags.isEmpty()) return
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp)
+    ) {
+        if (club.preferredGenres.isNotEmpty()) {
+            Text(
+                text = "Gêneros: ${club.preferredGenres.joinToString(" • ")}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+        }
+        if (club.preferredTags.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = "Tags: ${club.preferredTags.joinToString(" • ")}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+        }
     }
 }
