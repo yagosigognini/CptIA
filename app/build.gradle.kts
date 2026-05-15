@@ -35,6 +35,7 @@ android {
         // ✅ Adiciona a chave da API ao BuildConfig
         //    Certifique-se que 'getLocalProperty("GOOGLE_BOOKS_API_KEY", project)' está correto
         buildConfigField("String", "GOOGLE_BOOKS_API_KEY", "\"${getLocalProperty("GOOGLE_BOOKS_API_KEY", project)}\"")
+        buildConfigField("String", "GEMINI_API_KEY", "\"${getLocalProperty("GEMINI_API_KEY", project)}\"")
     }
 
     buildTypes {
@@ -46,10 +47,12 @@ android {
             )
             // ✅ Adiciona a chave da API ao BuildConfig de Release também
             buildConfigField("String", "GOOGLE_BOOKS_API_KEY", "\"${getLocalProperty("GOOGLE_BOOKS_API_KEY", project)}\"")
+        buildConfigField("String", "GEMINI_API_KEY", "\"${getLocalProperty("GEMINI_API_KEY", project)}\"")
         }
         // ✅ Opcional, mas recomendado: Adicione ao Debug também se precisar testar
         debug {
             buildConfigField("String", "GOOGLE_BOOKS_API_KEY", "\"${getLocalProperty("GOOGLE_BOOKS_API_KEY", project)}\"")
+        buildConfigField("String", "GEMINI_API_KEY", "\"${getLocalProperty("GEMINI_API_KEY", project)}\"")
         }
     }
     compileOptions {

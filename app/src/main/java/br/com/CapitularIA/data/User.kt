@@ -8,5 +8,7 @@ data class User(
     val coverPhotoUrl: String = "",
     val name_lowercase: String = "",
     val aboutMe: String = "",
-    val friendCount: Long = 0
+    val friendCount: Long = 0,
+    val favoriteGenres: List<String> = emptyList(),
+    val favoriteAuthors: List<String> = emptyList()
 )

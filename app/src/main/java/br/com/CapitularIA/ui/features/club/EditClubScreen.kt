@@ -87,6 +87,8 @@ fun EditClubScreen(
     var description by remember { mutableStateOf("") }
     var showHelpDialog by remember { mutableStateOf(false) }
     var isDropdownExpanded by remember { mutableStateOf(false) }
+    var preferredGenresText by remember { mutableStateOf("") }
+    var preferredTagsText by remember { mutableStateOf("") }
 
     val memberOptions = (2..20).toList()
     val maxDescriptionChars = 140
@@ -97,6 +99,8 @@ fun EditClubScreen(
             isPublic = it.isPublic
             maxMembers = it.maxMembers
             description = it.description
+            preferredGenresText = it.preferredGenres.joinToString(", ")
+            preferredTagsText = it.preferredTags.joinToString(", ")
         }
     }
 
@@ -236,10 +240,41 @@ fun EditClubScreen(
                             },
                             enabled = !isLoading
                         )
+
+                        Spacer(modifier = Modifier.height(24.dp))
+
+                        OutlinedTextField(
+                            value = preferredGenresText,
+                            onValueChange = { preferredGenresText = it },
+                            label = { Text("Gêneros preferidos do clube") },
+                            placeholder = { Text("Fantasia, Ficção Científica") },
+                            modifier = Modifier.fillMaxWidth(),
+                            enabled = !isLoading
+                        )
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        OutlinedTextField(
+                            value = preferredTagsText,
+                            onValueChange = { preferredTagsText = it },
+                            label = { Text("Tags recorrentes") },
+                            placeholder = { Text("medieval, política, aventura") },
+                            modifier = Modifier.fillMaxWidth(),
+                            enabled = !isLoading
+                        )
+
                         Spacer(modifier = Modifier.height(32.dp))
                         Button(
                             onClick = {
-                                viewModel.updateClub(clubName, description, isPublic, maxMembers, imageUri)
+                                viewModel.updateClub(
+                                    name = clubName,
+                                    description = description,
+                                    isPublic = isPublic,
+                                    maxMembers = maxMembers,
+                                    preferredGenres = preferredGenresText.split(",").map { it.trim() }.filter { it.isNotBlank() },
+                                    preferredTags = preferredTagsText.split(",").map { it.trim() }.filter { it.isNotBlank() },
+                                    newImageUri = imageUri
+                                )
                             },
                             modifier = Modifier
                                 .fillMaxWidth()
