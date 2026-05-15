@@ -2,7 +2,6 @@ package br.com.CapitularIA.ui.features.club
 
 // --- Imports Essenciais ---
 import android.util.Log
-import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -31,7 +30,10 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.SportsEsports
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
@@ -39,6 +41,8 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalIconButton
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -52,6 +56,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -59,13 +64,13 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import br.com.CapitularIA.R
 import br.com.CapitularIA.data.BookClub
 import br.com.CapitularIA.data.IndicatedBook
@@ -79,6 +84,7 @@ import coil.compose.AsyncImage
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.ktx.Firebase
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import java.util.concurrent.TimeUnit
@@ -107,7 +113,8 @@ fun ClubScreen(
     val bookPendingIndication by viewModel.bookPendingIndication // Observa o livro pendente vindo da busca
 
     var inputText by remember { mutableStateOf("") } // Estado local para o campo de mensagem
-    val context = LocalContext.current
+    var isQuickMenuExpanded by rememberSaveable { mutableStateOf(false) }
+    var selectedQuickAction by rememberSaveable { mutableStateOf<QuickAction?>(null) }
 
     // Mostra o diálogo de confirmação se houver um livro pendente (retornado da busca)
     bookPendingIndication?.let { book ->
@@ -140,11 +147,17 @@ fun ClubScreen(
         onBackClick = onBackClick,
         onProfileClick = onProfileClick,
         onAdminClick = onAdminClick,
-        onMenuClick = {
-            // Ação temporária para o botão de menu
-            Toast.makeText(context, "Menu de opções", Toast.LENGTH_SHORT).show()
-        }
+        isQuickMenuExpanded = isQuickMenuExpanded,
+        onToggleQuickMenu = { isQuickMenuExpanded = !isQuickMenuExpanded },
+        onQuickActionClick = { selectedQuickAction = it; isQuickMenuExpanded = false }
     )
+
+    selectedQuickAction?.let { action ->
+        QuickActionDialog(
+            action = action,
+            onDismiss = { selectedQuickAction = null }
+        )
+    }
 }
 
 // --- TELA "BURRA" (STATELESS) ---
@@ -164,7 +177,9 @@ fun ClubScreenContent(
     onBackClick: () -> Unit,
     onProfileClick: (String) -> Unit,
     onAdminClick: () -> Unit,
-    onMenuClick: () -> Unit
+    isQuickMenuExpanded: Boolean,
+    onToggleQuickMenu: () -> Unit,
+    onQuickActionClick: (QuickAction) -> Unit
 ) {
     AppBackground(backgroundResId = R.drawable.background) {
         Scaffold(
@@ -175,7 +190,9 @@ fun ClubScreenContent(
                         text = inputText, // Passa o texto atual
                         onTextChange = onInputChange, // Passa a função para mudar o texto
                         onSendClick = onSendMessage, // Passa a função de enviar
-                        onMenuClick = onMenuClick // Passa a função do menu
+                        isQuickMenuExpanded = isQuickMenuExpanded,
+                        onToggleQuickMenu = onToggleQuickMenu,
+                        onQuickActionClick = onQuickActionClick
                     )
                 }
             },
@@ -321,6 +338,7 @@ fun ActionPanel(
                     }
                 }
             }
+            }
         }
     }
 }
@@ -396,12 +414,13 @@ fun MessageList(
     modifier: Modifier = Modifier // Recebe o modifier
 ) {
     val listState = rememberLazyListState()
+    val chatItems = remember(messages) { messages.withDayHeaders() }
 
     // Rola para a última mensagem quando a lista muda
     LaunchedEffect(messages.size) {
         if (messages.isNotEmpty()) {
             // Use coroutine para garantir que a rolagem aconteça após a composição
-            listState.animateScrollToItem(messages.size - 1)
+            listState.animateScrollToItem(chatItems.lastIndex)
         }
     }
 
@@ -411,8 +430,20 @@ fun MessageList(
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp) // Espaço entre mensagens
     ) {
-        items(messages) { message -> // Itera sobre a lista de mensagens
-            MessageItem(message = message, onProfileClick = onProfileClick) // Passa cada mensagem
+        items(chatItems) { item ->
+            when (item) {
+                is ChatListItem.DayHeader -> DaySeparator(item.label)
+                is ChatListItem.ChatMessage -> MessageItem(message = item.message, onProfileClick = onProfileClick)
+            }
+        }
+    }
+}
+
+@Composable
+fun DaySeparator(label: String) {
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+        Surface(shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
+            Text(text = label, modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp), fontSize = 12.sp)
         }
     }
 }
@@ -493,10 +524,16 @@ fun MessageInput(
     text: String, // Texto atual no campo
     onTextChange: (String) -> Unit, // Função para atualizar o texto
     onSendClick: () -> Unit, // Função para enviar a mensagem
-    onMenuClick: () -> Unit // Função para o botão de menu
+    isQuickMenuExpanded: Boolean,
+    onToggleQuickMenu: () -> Unit,
+    onQuickActionClick: (QuickAction) -> Unit
 ) {
     Surface(shadowElevation = 8.dp) { // Sombra para destacar
-        Row(
+        Column {
+            if (isQuickMenuExpanded) {
+                QuickActionMenu(onQuickActionClick = onQuickActionClick)
+            }
+            Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .windowInsetsPadding(WindowInsets.navigationBars) // Afasta do fundo (gestos/botões)
@@ -504,7 +541,7 @@ fun MessageInput(
             verticalAlignment = Alignment.CenterVertically
         ) {
             // Botão de Menu
-            FilledTonalIconButton(onClick = onMenuClick) {
+            FilledTonalIconButton(onClick = onToggleQuickMenu) {
                 Icon(Icons.Default.Menu, contentDescription = "Opções")
             }
             Spacer(modifier = Modifier.width(8.dp))
@@ -525,7 +562,104 @@ fun MessageInput(
                     }
                 }
             )
+            }
         }
+    }
+}
+
+
+
+private enum class QuickAction(val label: String) {
+    Recommendation("Pedir recomendação"),
+    History("Histórico"),
+    Gamification("Gamificação")
+}
+
+@Composable
+private fun QuickActionMenu(onQuickActionClick: (QuickAction) -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+        horizontalArrangement = Arrangement.SpaceEvenly
+    ) {
+        QuickActionButton(Icons.Default.AutoAwesome, "Recomendação") {
+            onQuickActionClick(QuickAction.Recommendation)
+        }
+        QuickActionButton(Icons.Default.History, "Histórico") {
+            onQuickActionClick(QuickAction.History)
+        }
+        QuickActionButton(Icons.Default.SportsEsports, "Gamificação") {
+            onQuickActionClick(QuickAction.Gamification)
+        }
+    }
+}
+
+@Composable
+private fun QuickActionButton(icon: androidx.compose.ui.graphics.vector.ImageVector, text: String, onClick: () -> Unit) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        FloatingActionButton(onClick = onClick, modifier = Modifier.size(52.dp)) {
+            Icon(icon, contentDescription = text)
+        }
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(text = text, style = MaterialTheme.typography.labelSmall)
+    }
+}
+
+@Composable
+private fun QuickActionDialog(action: QuickAction, onDismiss: () -> Unit) {
+    val (title, message) = when (action) {
+        QuickAction.Recommendation -> "Pedir recomendação" to "Integração pronta para conectar com a API do Gemini e sugerir livros com base no momento do grupo."
+        QuickAction.History -> "Histórico do clube" to "Aqui serão listados os livros já lidos pelo clube, incluindo autor e data de conclusão."
+        QuickAction.Gamification -> "Gamificação" to "Conquistas como Leitor da Madrugada e Fominha aparecem aqui conforme participação no chat e leitura."
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = { Text(message) },
+        confirmButton = { Button(onClick = onDismiss) { Text("Fechar") } }
+    )
+}
+
+private sealed interface ChatListItem {
+    data class DayHeader(val label: String) : ChatListItem
+    data class ChatMessage(val message: Message) : ChatListItem
+}
+
+private fun List<Message>.withDayHeaders(now: Date = Date()): List<ChatListItem> {
+    if (isEmpty()) return emptyList()
+    val sorted = this.sortedBy { it.timestamp?.time ?: 0L }
+    val items = mutableListOf<ChatListItem>()
+    var currentKey: String? = null
+
+    for (message in sorted) {
+        val ts = message.timestamp ?: continue
+        val key = SimpleDateFormat("yyyyMMdd", Locale.getDefault()).format(ts)
+        if (key != currentKey) {
+            items += ChatListItem.DayHeader(ts.toDayHeaderLabel(now))
+            currentKey = key
+        }
+        items += ChatListItem.ChatMessage(message)
+    }
+    return items
+}
+
+private fun Date.toDayHeaderLabel(now: Date = Date()): String {
+    val today = Calendar.getInstance().apply { time = now }
+    val target = Calendar.getInstance().apply { time = this@toDayHeaderLabel }
+
+    val sameDay = today.get(Calendar.YEAR) == target.get(Calendar.YEAR) && today.get(Calendar.DAY_OF_YEAR) == target.get(Calendar.DAY_OF_YEAR)
+    if (sameDay) return "Hoje"
+
+    today.add(Calendar.DAY_OF_YEAR, -1)
+    val isYesterday = today.get(Calendar.YEAR) == target.get(Calendar.YEAR) && today.get(Calendar.DAY_OF_YEAR) == target.get(Calendar.DAY_OF_YEAR)
+    if (isYesterday) return "Ontem"
+
+    return if (Calendar.getInstance().get(Calendar.YEAR) == target.get(Calendar.YEAR)) {
+        SimpleDateFormat("EEEE", Locale("pt", "BR")).format(this).replaceFirstChar { it.uppercase() }
+    } else {
+        SimpleDateFormat("d 'de' MMMM 'de' yyyy", Locale("pt", "BR")).format(this)
     }
 }
 
@@ -572,7 +706,9 @@ fun ClubScreenContentPreview() {
             onBackClick = {},
             onProfileClick = {},
             onAdminClick = {},
-            onMenuClick = {}
+            isQuickMenuExpanded = false,
+            onToggleQuickMenu = {},
+            onQuickActionClick = {}
         )
     }
 }
