@@ -186,13 +186,24 @@ class ClubViewModel : ViewModel() {
 
             // Calcula a data final
             val cycleDaysInMillis = TimeUnit.DAYS.toMillis(cycleDays.toLong())
-            val endDate = System.currentTimeMillis() + cycleDaysInMillis
+            val startDate = System.currentTimeMillis()
+            val endDate = startDate + cycleDaysInMillis
+
+            val currentHistory = _club.value?.readingHistory ?: emptyList()
+            val historyEntry = br.com.CapitularIA.data.ReadingHistoryEntry(
+                title = indicatedBook.title,
+                author = indicatedBook.author,
+                startDate = startDate,
+                endDate = endDate
+            )
 
             // Prepara os dados para atualizar no Firestore
             val clubUpdates = mapOf(
                 "indicatedBook" to indicatedBook, // Salva o objeto IndicatedBook
+                "cycleStartDate" to startDate,
                 "cycleEndDate" to endDate,
-                "readingCycleDays" to cycleDays // Atualiza a preferência
+                "readingCycleDays" to cycleDays, // Atualiza a preferência
+                "readingHistory" to (currentHistory + historyEntry)
             )
 
             try {
@@ -246,6 +257,7 @@ class ClubViewModel : ViewModel() {
             val updates = mapOf(
                 "currentUserForCycleId" to randomUserId,
                 "indicatedBook" to null,
+                "cycleStartDate" to null,
                 "cycleEndDate" to null
             )
 
