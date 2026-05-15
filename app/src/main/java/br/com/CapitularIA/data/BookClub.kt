@@ -15,7 +15,9 @@ data class BookClub(
     // --- Campos do Ciclo de Leitura ---
     val currentUserForCycleId: String? = null,
     val indicatedBook: IndicatedBook? = null, // Substitui o 'indicatedBookTitle'
+    val cycleStartDate: Long? = null,
     val cycleEndDate: Long? = null,
+    val readingHistory: List<ReadingHistoryEntry> = emptyList(),
 
     // --- Campo das Solicitações ---
     val joinRequests: List<String> = emptyList(),
