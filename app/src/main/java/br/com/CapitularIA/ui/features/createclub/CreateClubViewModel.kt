@@ -37,6 +37,8 @@ class CreateClubViewModel : ViewModel() {
         description: String,
         isPublic: Boolean,
         maxMembers: Int,
+        preferredGenres: List<String>,
+        preferredTags: List<String>,
         imageUri: Uri? // ✅ Novo parâmetro
     ) {
         if (name.isBlank() || description.isBlank()) {
@@ -81,7 +83,9 @@ class CreateClubViewModel : ViewModel() {
                     adminId = adminId,
                     members = listOf(adminId),
                     maxMembers = maxMembers,
-                    imageUrl = finalImageUrl // ✅ Salva a URL correta
+                    imageUrl = finalImageUrl, // ✅ Salva a URL correta
+                    preferredGenres = preferredGenres,
+                    preferredTags = preferredTags
                 )
 
                 db.collection("clubs").document(clubId).set(newClub).await()
