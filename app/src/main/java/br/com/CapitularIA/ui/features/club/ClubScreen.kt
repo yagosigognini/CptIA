@@ -155,7 +155,6 @@ fun ClubScreen(
     selectedQuickAction?.let { action ->
         QuickActionDialog(
             action = action,
-            club = club,
             onDismiss = { selectedQuickAction = null }
         )
     }
@@ -593,6 +592,74 @@ private fun QuickActionMenu(onQuickActionClick: (QuickAction) -> Unit) {
         QuickActionButton(Icons.Default.SportsEsports, "Gamificação") {
             onQuickActionClick(QuickAction.Gamification)
         }
+    }
+}
+
+@Composable
+private fun QuickActionButton(icon: androidx.compose.ui.graphics.vector.ImageVector, text: String, onClick: () -> Unit) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        FloatingActionButton(onClick = onClick, modifier = Modifier.size(52.dp)) {
+            Icon(icon, contentDescription = text)
+        }
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(text = text, style = MaterialTheme.typography.labelSmall)
+    }
+}
+
+@Composable
+private fun QuickActionDialog(action: QuickAction, onDismiss: () -> Unit) {
+    val (title, message) = when (action) {
+        QuickAction.Recommendation -> "Pedir recomendação" to "Integração pronta para conectar com a API do Gemini e sugerir livros com base no momento do grupo."
+        QuickAction.History -> "Histórico do clube" to "Aqui serão listados os livros já lidos pelo clube, incluindo autor e data de conclusão."
+        QuickAction.Gamification -> "Gamificação" to "Conquistas como Leitor da Madrugada e Fominha aparecem aqui conforme participação no chat e leitura."
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = { Text(message) },
+        confirmButton = { Button(onClick = onDismiss) { Text("Fechar") } }
+    )
+}
+
+private sealed interface ChatListItem {
+    data class DayHeader(val label: String) : ChatListItem
+    data class ChatMessage(val message: Message) : ChatListItem
+}
+
+private fun List<Message>.withDayHeaders(now: Date = Date()): List<ChatListItem> {
+    if (isEmpty()) return emptyList()
+    val sorted = this.sortedBy { it.timestamp?.time ?: 0L }
+    val items = mutableListOf<ChatListItem>()
+    var currentKey: String? = null
+
+    for (message in sorted) {
+        val ts = message.timestamp ?: continue
+        val key = SimpleDateFormat("yyyyMMdd", Locale.getDefault()).format(ts)
+        if (key != currentKey) {
+            items += ChatListItem.DayHeader(ts.toDayHeaderLabel(now))
+            currentKey = key
+        }
+        items += ChatListItem.ChatMessage(message)
+    }
+    return items
+}
+
+private fun Date.toDayHeaderLabel(now: Date = Date()): String {
+    val today = Calendar.getInstance().apply { time = now }
+    val target = Calendar.getInstance().apply { time = this@toDayHeaderLabel }
+
+    val sameDay = today.get(Calendar.YEAR) == target.get(Calendar.YEAR) && today.get(Calendar.DAY_OF_YEAR) == target.get(Calendar.DAY_OF_YEAR)
+    if (sameDay) return "Hoje"
+
+    today.add(Calendar.DAY_OF_YEAR, -1)
+    val isYesterday = today.get(Calendar.YEAR) == target.get(Calendar.YEAR) && today.get(Calendar.DAY_OF_YEAR) == target.get(Calendar.DAY_OF_YEAR)
+    if (isYesterday) return "Ontem"
+
+    return if (Calendar.getInstance().get(Calendar.YEAR) == target.get(Calendar.YEAR)) {
+        SimpleDateFormat("EEEE", Locale("pt", "BR")).format(this).replaceFirstChar { it.uppercase() }
+    } else {
+        SimpleDateFormat("d 'de' MMMM 'de' yyyy", Locale("pt", "BR")).format(this)
     }
 }
 
