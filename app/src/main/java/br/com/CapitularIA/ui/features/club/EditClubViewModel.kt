@@ -43,6 +43,8 @@ class EditClubViewModel : ViewModel() {
         description: String,
         isPublic: Boolean,
         maxMembers: Int,
+        preferredGenres: List<String>,
+        preferredTags: List<String>,
         newImageUri: Uri?
     ) {
         viewModelScope.launch {
@@ -78,7 +80,9 @@ class EditClubViewModel : ViewModel() {
                     "public" to isPublic,
                     "maxMembers" to maxMembers,
                     "imageUrl" to finalImageUrl,
-                    "code" to finalCode
+                    "code" to finalCode,
+                    "preferredGenres" to preferredGenres,
+                    "preferredTags" to preferredTags
                 )
 
                 db.collection("clubs").document(currentClub.id).update(updates).await()
