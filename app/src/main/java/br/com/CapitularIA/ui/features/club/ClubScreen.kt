@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
@@ -76,6 +77,7 @@ import br.com.CapitularIA.data.BookClub
 import br.com.CapitularIA.data.IndicatedBook
 import br.com.CapitularIA.data.Message
 import br.com.CapitularIA.data.User
+import br.com.CapitularIA.data.ValidatedRecommendation
 import br.com.CapitularIA.data.sampleClubsList
 import br.com.CapitularIA.data.sampleUser
 import br.com.CapitularIA.ui.components.AppBackground
@@ -111,6 +113,8 @@ fun ClubScreen(
     val accessDenied by viewModel.accessDenied.observeAsState(false)
     val sortedUser by viewModel.sortedUser.observeAsState(null)
     val bookPendingIndication by viewModel.bookPendingIndication // Observa o livro pendente vindo da busca
+    val recommendations by viewModel.recommendations.observeAsState(emptyList())
+    val isLoadingRecommendations by viewModel.isLoadingRecommendations.observeAsState(false)
 
     var inputText by remember { mutableStateOf("") } // Estado local para o campo de mensagem
     var isQuickMenuExpanded by rememberSaveable { mutableStateOf(false) }
@@ -149,13 +153,21 @@ fun ClubScreen(
         onAdminClick = onAdminClick,
         isQuickMenuExpanded = isQuickMenuExpanded,
         onToggleQuickMenu = { isQuickMenuExpanded = !isQuickMenuExpanded },
-        onQuickActionClick = { selectedQuickAction = it; isQuickMenuExpanded = false }
+        onQuickActionClick = { action ->
+            selectedQuickAction = action
+            isQuickMenuExpanded = false
+            if (action == QuickAction.Recommendation) {
+                viewModel.requestBookRecommendations(inputText)
+            }
+        }
     )
 
     selectedQuickAction?.let { action ->
         QuickActionDialog(
             action = action,
             club = club,
+            recommendations = recommendations,
+            isLoadingRecommendations = isLoadingRecommendations,
             onDismiss = { selectedQuickAction = null }
         )
     }
@@ -210,6 +222,11 @@ fun ClubScreenContent(
                     onBackClick = onBackClick, // Passa a função de voltar
                     onAdminClick = onAdminClick // Passa a função de admin
                 )
+
+
+                if (club != null) {
+                    ClubPreferencesSection(club = club)
+                }
 
                 // Painel de Ações (Sorteio/Indicação) - Mostrado apenas se for membro
                 if (club != null && !accessDenied) {
@@ -400,7 +417,7 @@ fun ClubHeader(
             text = club?.name ?: "Carregando...",
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold,
-            color = Color.White,
+            color = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier
                 .align(Alignment.BottomStart)
                 .padding(16.dp)
@@ -608,9 +625,15 @@ private fun QuickActionButton(icon: androidx.compose.ui.graphics.vector.ImageVec
 }
 
 @Composable
-private fun QuickActionDialog(action: QuickAction, club: BookClub?, onDismiss: () -> Unit) {
+private fun QuickActionDialog(
+    action: QuickAction,
+    club: BookClub?,
+    recommendations: List<ValidatedRecommendation>,
+    isLoadingRecommendations: Boolean,
+    onDismiss: () -> Unit
+) {
     val (title, message) = when (action) {
-        QuickAction.Recommendation -> "Pedir recomendação" to "Integração pronta para conectar com a API do Gemini e sugerir livros com base no momento do grupo."
+        QuickAction.Recommendation -> "Pedir recomendação" to ""
         QuickAction.History -> "Histórico do clube" to formatHistory(club)
         QuickAction.Gamification -> "Gamificação" to "Conquistas como Leitor da Madrugada e Fominha aparecem aqui conforme participação no chat e leitura."
     }
@@ -618,7 +641,25 @@ private fun QuickActionDialog(action: QuickAction, club: BookClub?, onDismiss: (
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
-        text = { Text(message) },
+        text = {
+            if (action == QuickAction.Recommendation) {
+                when {
+                    isLoadingRecommendations -> CircularProgressIndicator()
+                    recommendations.isEmpty() -> Text("Sem recomendações no momento. Toque novamente após enviar contexto no chat.")
+                    else -> {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            recommendations.forEach { item ->
+                                val title = item.bookItem.volumeInfo?.title ?: item.recommendation.title
+                                val author = item.bookItem.volumeInfo?.authors?.joinToString() ?: item.recommendation.author
+                                Text("• $title - $author\n${item.recommendation.reason}", style = MaterialTheme.typography.bodyMedium)
+                            }
+                        }
+                    }
+                }
+            } else {
+                Text(message)
+            }
+        },
         confirmButton = { Button(onClick = onDismiss) { Text("Fechar") } }
     )
 }
@@ -724,5 +765,33 @@ fun ClubScreenContentPreview() {
             onToggleQuickMenu = {},
             onQuickActionClick = {}
         )
+    }
+}
+
+
+@Composable
+private fun ClubPreferencesSection(club: BookClub) {
+    if (club.preferredGenres.isEmpty() && club.preferredTags.isEmpty()) return
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp)
+    ) {
+        if (club.preferredGenres.isNotEmpty()) {
+            Text(
+                text = "Gêneros: ${club.preferredGenres.joinToString(" • ")}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+        }
+        if (club.preferredTags.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = "Tags: ${club.preferredTags.joinToString(" • ")}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+        }
     }
 }

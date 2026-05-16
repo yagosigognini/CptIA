@@ -22,5 +22,9 @@ data class BookClub(
     // --- Campo das Solicitações ---
     val joinRequests: List<String> = emptyList(),
 
+    // --- Preferências literárias do clube ---
+    val preferredGenres: List<String> = emptyList(),
+    val preferredTags: List<String> = emptyList(),
+
     val createdAt: Long = System.currentTimeMillis()
 )

@@ -405,7 +405,13 @@ class ProfileViewModel : ViewModel() {
     }
 
     // --- Funções de Atualização de Perfil ---
-    fun updateUserProfile(name: String, aboutMe: String, newImageUri: Uri?) {
+    fun updateUserProfile(
+        name: String,
+        aboutMe: String,
+        favoriteGenres: List<String>,
+        favoriteAuthors: List<String>,
+        newImageUri: Uri?
+    ) {
         viewModelScope.launch {
             _updateStatus.value = UpdateStatus.LOADING
             val uid = auth.currentUser?.uid ?: run { /* ... (tratamento de erro) ... */ return@launch }
@@ -420,18 +426,27 @@ class ProfileViewModel : ViewModel() {
                 }
 
                 // Atualiza o documento no Firestore
-                updateUserDocument(uid, name, aboutMe, imageUrl)
+                updateUserDocument(uid, name, aboutMe, favoriteGenres, favoriteAuthors, imageUrl)
 
             } catch (e: Exception) { /* ... (tratamento de erro) ... */ }
         }
     }
 
-    private suspend fun updateUserDocument(uid: String, name: String, aboutMe: String, imageUrl: String?) {
+    private suspend fun updateUserDocument(
+        uid: String,
+        name: String,
+        aboutMe: String,
+        favoriteGenres: List<String>,
+        favoriteAuthors: List<String>,
+        imageUrl: String?
+    ) {
         val userRef = db.collection("users").document(uid)
         val updates = mutableMapOf<String, Any>()
         updates["name"] = name
         updates["name_lowercase"] = name.lowercase(Locale.ROOT)
         updates["aboutMe"] = aboutMe
+        updates["favoriteGenres"] = favoriteGenres
+        updates["favoriteAuthors"] = favoriteAuthors
         imageUrl?.let { updates["profilePictureUrl"] = it } // Adiciona URL apenas se não for nula
 
         try {

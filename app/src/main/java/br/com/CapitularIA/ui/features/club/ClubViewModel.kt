@@ -13,6 +13,11 @@ import br.com.CapitularIA.data.IndicatedBook // Mantemos para salvar
 import br.com.CapitularIA.data.Message
 import br.com.CapitularIA.data.User
 import br.com.CapitularIA.data.getBestAvailableImageUrl // ⬇️ NOVO
+import br.com.CapitularIA.data.BookHistory
+import br.com.CapitularIA.data.ClubRecommendationContext
+import br.com.CapitularIA.data.RecommendationRequest
+import br.com.CapitularIA.data.ValidatedRecommendation
+import br.com.CapitularIA.services.ClubBookRecommendationEngine
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.firestore.ListenerRegistration // ⬇️ NOVO
 import com.google.firebase.firestore.Query
@@ -23,6 +28,8 @@ import kotlinx.coroutines.tasks.await
 import java.util.concurrent.TimeUnit
 
 class ClubViewModel : ViewModel() {
+
+    private val recommendationEngine = ClubBookRecommendationEngine()
 
     private val db = Firebase.firestore
     private val auth = Firebase.auth
@@ -55,6 +62,12 @@ class ClubViewModel : ViewModel() {
 
     private val _toastMessage = MutableLiveData<String?>(null)
     val toastMessage: LiveData<String?> = _toastMessage
+
+    private val _recommendations = MutableLiveData<List<ValidatedRecommendation>>(emptyList())
+    val recommendations: LiveData<List<ValidatedRecommendation>> = _recommendations
+
+    private val _isLoadingRecommendations = MutableLiveData(false)
+    val isLoadingRecommendations: LiveData<Boolean> = _isLoadingRecommendations
 
     fun loadClubAndMessages(clubId: String) {
         _isLoading.value = true
@@ -315,6 +328,53 @@ class ClubViewModel : ViewModel() {
         } catch (e: Exception) {
             Log.e("ClubViewModel", "Erro ao postar mensagem de indicação no chat", e)
             // Considerar mostrar um erro para o usuário? (_toastMessage.value = ...)
+        }
+    }
+
+
+    fun requestBookRecommendations(userPrompt: String) {
+        val club = _club.value
+        if (club == null) {
+            _toastMessage.value = "Clube não carregado."
+            return
+        }
+        val prompt = userPrompt.ifBlank { "Recomende livros para o perfil atual do clube." }
+
+        viewModelScope.launch {
+            _isLoadingRecommendations.value = true
+            try {
+                val history = club.readingHistory.mapIndexed { index, entry ->
+                    BookHistory(
+                        googleBooksId = "history_$index",
+                        title = entry.title,
+                        rating = null
+                    )
+                }
+                val context = ClubRecommendationContext(
+                    clubId = club.id,
+                    clubName = club.name,
+                    predominantGenres = club.preferredGenres,
+                    readBooks = history,
+                    favoriteBooks = emptyList(),
+                    recurringTags = club.preferredTags,
+                    averageRating = null
+                )
+
+                val recentTitles = _recommendations.value.orEmpty().map { it.recommendation.title }
+                val result = recommendationEngine.recommendBooks(
+                    context = context,
+                    request = RecommendationRequest(userPrompt = prompt, maxResults = 5),
+                    recentRecommendationTitles = recentTitles
+                )
+
+                _recommendations.value = result
+                if (result.isEmpty()) _toastMessage.value = "Nenhuma recomendação válida encontrada."
+            } catch (e: Exception) {
+                Log.e("ClubViewModel", "Erro ao gerar recomendações", e)
+                _toastMessage.value = "Erro ao gerar recomendações. Verifique sua API key do Gemini."
+            } finally {
+                _isLoadingRecommendations.value = false
+            }
         }
     }
 
