@@ -31,12 +31,14 @@ import coil.compose.AsyncImage
 fun EditProfileScreen(
     currentUser: User,
     updateStatus: UpdateStatus,
-    onSaveClick: (name: String, aboutMe: String, newImageUri: Uri?) -> Unit,
+    onSaveClick: (name: String, aboutMe: String, favoriteGenres: List<String>, favoriteAuthors: List<String>, newImageUri: Uri?) -> Unit,
     onBackClick: () -> Unit
 ) {
     var newImageUri by remember { mutableStateOf<Uri?>(null) }
     var name by remember { mutableStateOf(currentUser.name) }
     var aboutMe by remember { mutableStateOf(currentUser.aboutMe) }
+    var favoriteGenresText by remember { mutableStateOf(currentUser.favoriteGenres.joinToString(", ")) }
+    var favoriteAuthorsText by remember { mutableStateOf(currentUser.favoriteAuthors.joinToString(", ")) }
 
     val imagePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
@@ -60,7 +62,15 @@ fun EditProfileScreen(
                     actions = {
                         TextButton(
                             enabled = !isLoading,
-                            onClick = { onSaveClick(name, aboutMe, newImageUri) }
+                            onClick = {
+                                onSaveClick(
+                                    name,
+                                    aboutMe,
+                                    favoriteGenresText.split(",").map { it.trim() }.filter { it.isNotBlank() },
+                                    favoriteAuthorsText.split(",").map { it.trim() }.filter { it.isNotBlank() },
+                                    newImageUri
+                                )
+                            }
                         ) {
                             Text("Salvar", fontWeight = FontWeight.Bold)
                         }
@@ -111,6 +121,23 @@ fun EditProfileScreen(
                             .fillMaxWidth()
                             .height(150.dp)
                     )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+                    OutlinedTextField(
+                        value = favoriteGenresText,
+                        onValueChange = { favoriteGenresText = it },
+                        label = { Text("Gêneros favoritos") },
+                        placeholder = { Text("Fantasia, Romance") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    OutlinedTextField(
+                        value = favoriteAuthorsText,
+                        onValueChange = { favoriteAuthorsText = it },
+                        label = { Text("Autores favoritos") },
+                        placeholder = { Text("Asimov, Tolkien") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 }
                 if (isLoading) {
                     CircularProgressIndicator()
@@ -127,7 +154,7 @@ fun EditProfileScreenPreview() {
         EditProfileScreen(
             currentUser = sampleUser,
             updateStatus = UpdateStatus.IDLE,
-            onSaveClick = { _, _, _ -> },
+            onSaveClick = { _, _, _, _, _ -> },
             onBackClick = {}
         )
     }

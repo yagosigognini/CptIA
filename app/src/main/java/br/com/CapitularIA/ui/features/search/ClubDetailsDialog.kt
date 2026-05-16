@@ -72,7 +72,20 @@ fun ClubDetailsDialog(
 
                         Text("Descrição", style = MaterialTheme.typography.titleMedium)
                         Text(club!!.description, style = MaterialTheme.typography.bodyMedium)
-                        Spacer(modifier = Modifier.height(16.dp))
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        if (club!!.preferredGenres.isNotEmpty()) {
+                            Text("Gêneros do clube", style = MaterialTheme.typography.titleMedium)
+                            Text(club!!.preferredGenres.joinToString(" • "), style = MaterialTheme.typography.bodyMedium)
+                            Spacer(modifier = Modifier.height(8.dp))
+                        }
+                        if (club!!.preferredTags.isNotEmpty()) {
+                            Text("Tags recorrentes", style = MaterialTheme.typography.titleMedium)
+                            Text(club!!.preferredTags.joinToString(" • "), style = MaterialTheme.typography.bodyMedium)
+                            Spacer(modifier = Modifier.height(16.dp))
+                        } else {
+                            Spacer(modifier = Modifier.height(16.dp))
+                        }
 
                         // ✅ SEÇÃO DO MODERADOR ADICIONADA
                         Text("Moderador", style = MaterialTheme.typography.titleMedium)

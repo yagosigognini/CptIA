@@ -214,7 +214,35 @@ class AdminViewModel : ViewModel() {
         }
     }
 
-    fun drawUserForCycle() {
+    
+    fun transferAdmin(newAdminUserId: String) {
+        viewModelScope.launch {
+            val current = _club.value
+            val me = currentUserId
+            if (current == null || me == null) {
+                _toastMessage.value = "Erro ao transferir administração."
+                return@launch
+            }
+            if (current.adminId != me) {
+                _toastMessage.value = "Apenas o admin atual pode transferir."
+                return@launch
+            }
+            if (!current.members.contains(newAdminUserId)) {
+                _toastMessage.value = "Novo admin precisa ser membro do clube."
+                return@launch
+            }
+            try {
+                db.collection("clubs").document(currentClubId)
+                    .update("adminId", newAdminUserId)
+                    .await()
+                _toastMessage.value = "Administração transferida com sucesso!"
+            } catch (e: Exception) {
+                Log.e("AdminViewModel", "Erro ao transferir administração", e)
+                _toastMessage.value = "Erro ao transferir administração."
+            }
+        }
+    }
+fun drawUserForCycle() {
         viewModelScope.launch {
             val currentClub = _club.value
             val adminId = auth.currentUser?.uid
