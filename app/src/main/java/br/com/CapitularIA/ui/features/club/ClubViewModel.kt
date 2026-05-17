@@ -65,6 +65,7 @@ class ClubViewModel : ViewModel() {
 
     private val _recommendations = MutableLiveData<List<ValidatedRecommendation>>(emptyList())
     val recommendations: LiveData<List<ValidatedRecommendation>> = _recommendations
+    private val recentRecommendationHistory = ArrayDeque<String>()
 
     private val _isLoadingRecommendations = MutableLiveData(false)
     val isLoadingRecommendations: LiveData<Boolean> = _isLoadingRecommendations
@@ -73,6 +74,10 @@ class ClubViewModel : ViewModel() {
         _isLoading.value = true
         _accessDenied.value = false
         val currentUserId = auth.currentUser?.uid
+        if (currentClubId != clubId) {
+            recentRecommendationHistory.clear()
+            _recommendations.value = emptyList()
+        }
         this.currentClubId = clubId // Guarda o ID
 
         // Limpa listeners antigos antes de registrar novos
@@ -360,7 +365,7 @@ class ClubViewModel : ViewModel() {
                     averageRating = null
                 )
 
-                val recentTitles = _recommendations.value.orEmpty().map { it.recommendation.title }
+                val recentTitles = recentRecommendationHistory.toList()
                 val result = recommendationEngine.recommendBooks(
                     context = context,
                     request = RecommendationRequest(userPrompt = prompt, maxResults = 5),
@@ -368,6 +373,7 @@ class ClubViewModel : ViewModel() {
                 )
 
                 _recommendations.value = result
+                updateRecommendationHistory(result.map { it.recommendation.title })
                 if (result.isEmpty()) _toastMessage.value = "Nenhuma recomendação válida encontrada."
             } catch (e: Exception) {
                 Log.e("ClubViewModel", "Erro ao gerar recomendações", e)
@@ -380,6 +386,20 @@ class ClubViewModel : ViewModel() {
 
     fun onToastMessageShown() {
         _toastMessage.value = null
+    }
+
+    private fun updateRecommendationHistory(newTitles: List<String>) {
+        newTitles
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .forEach { title ->
+                recentRecommendationHistory.removeAll { it.equals(title, ignoreCase = true) }
+                recentRecommendationHistory.addLast(title)
+            }
+
+        while (recentRecommendationHistory.size > 30) {
+            recentRecommendationHistory.removeFirst()
+        }
     }
 
     // ⬇️ NOVO: Limpa todos os listeners quando o ViewModel é destruído
