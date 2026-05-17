@@ -157,7 +157,21 @@ fun ClubScreen(
             selectedQuickAction = action
             isQuickMenuExpanded = false
             if (action == QuickAction.Recommendation) {
-                viewModel.requestBookRecommendations(inputText)
+                val chatContext = messages
+                    .asReversed()
+                    .mapNotNull { message -> message.text?.trim() }
+                    .filter { it.isNotBlank() }
+                    .take(6)
+                    .asReversed()
+                    .joinToString("\n")
+
+                val recommendationPrompt = when {
+                    inputText.isNotBlank() -> inputText
+                    chatContext.isNotBlank() -> "Contexto recente do chat:\n$chatContext"
+                    else -> "Recomende livros para o perfil atual do clube."
+                }
+
+                viewModel.requestBookRecommendations(recommendationPrompt)
             }
         }
     )
