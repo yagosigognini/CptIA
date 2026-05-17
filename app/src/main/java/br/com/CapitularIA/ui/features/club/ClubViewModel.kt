@@ -371,7 +371,7 @@ class ClubViewModel : ViewModel() {
                 if (result.isEmpty()) _toastMessage.value = "Nenhuma recomendação válida encontrada."
             } catch (e: Exception) {
                 Log.e("ClubViewModel", "Erro ao gerar recomendações", e)
-                _toastMessage.value = "Erro ao gerar recomendações. Verifique sua API key do Gemini."
+                _toastMessage.value = "Não foi possível gerar recomendações agora. Tente novamente em instantes."
             } finally {
                 _isLoadingRecommendations.value = false
             }
