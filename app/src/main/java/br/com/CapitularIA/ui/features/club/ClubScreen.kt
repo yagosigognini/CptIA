@@ -119,6 +119,7 @@ fun ClubScreen(
     var inputText by remember { mutableStateOf("") } // Estado local para o campo de mensagem
     var isQuickMenuExpanded by rememberSaveable { mutableStateOf(false) }
     var selectedQuickAction by rememberSaveable { mutableStateOf<QuickAction?>(null) }
+    var recommendationInput by rememberSaveable { mutableStateOf("") }
 
     // Mostra o diálogo de confirmação se houver um livro pendente (retornado da busca)
     bookPendingIndication?.let { book ->
@@ -156,9 +157,6 @@ fun ClubScreen(
         onQuickActionClick = { action ->
             selectedQuickAction = action
             isQuickMenuExpanded = false
-            if (action == QuickAction.Recommendation) {
-                viewModel.requestBookRecommendations(inputText)
-            }
         }
     )
 
@@ -168,6 +166,25 @@ fun ClubScreen(
             club = club,
             recommendations = recommendations,
             isLoadingRecommendations = isLoadingRecommendations,
+            recommendationInput = recommendationInput,
+            onRecommendationInputChange = { recommendationInput = it },
+            onRequestRecommendations = {
+                val chatContext = messages
+                    .asReversed()
+                    .mapNotNull { message -> message.text?.trim() }
+                    .filter { it.isNotBlank() }
+                    .take(6)
+                    .asReversed()
+                    .joinToString("\n")
+
+                val recommendationPrompt = when {
+                    recommendationInput.isNotBlank() -> recommendationInput
+                    inputText.isNotBlank() -> inputText
+                    chatContext.isNotBlank() -> "Contexto recente do chat:\n$chatContext"
+                    else -> "Recomende livros para o perfil atual do clube."
+                }
+                viewModel.requestBookRecommendations(recommendationPrompt)
+            },
             onDismiss = { selectedQuickAction = null }
         )
     }
@@ -630,6 +647,9 @@ private fun QuickActionDialog(
     club: BookClub?,
     recommendations: List<ValidatedRecommendation>,
     isLoadingRecommendations: Boolean,
+    recommendationInput: String,
+    onRecommendationInputChange: (String) -> Unit,
+    onRequestRecommendations: () -> Unit,
     onDismiss: () -> Unit
 ) {
     val (title, message) = when (action) {
@@ -643,11 +663,24 @@ private fun QuickActionDialog(
         title = { Text(title) },
         text = {
             if (action == QuickAction.Recommendation) {
-                when {
-                    isLoadingRecommendations -> CircularProgressIndicator()
-                    recommendations.isEmpty() -> Text("Sem recomendações no momento. Toque novamente após enviar contexto no chat.")
-                    else -> {
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    OutlinedTextField(
+                        value = recommendationInput,
+                        onValueChange = onRecommendationInputChange,
+                        modifier = Modifier.fillMaxWidth(),
+                        placeholder = { Text("Ex.: queremos fantasia curta e contemporânea") },
+                        maxLines = 3,
+                        singleLine = false
+                    )
+
+                    Button(onClick = onRequestRecommendations) {
+                        Text("Gerar recomendações")
+                    }
+
+                    when {
+                        isLoadingRecommendations -> CircularProgressIndicator()
+                        recommendations.isEmpty() -> Text("Nenhuma recomendação ainda. Informe o que o grupo quer ler e toque em Gerar recomendações.")
+                        else -> {
                             recommendations.forEach { item ->
                                 val title = item.bookItem.volumeInfo?.title ?: item.recommendation.title
                                 val author = item.bookItem.volumeInfo?.authors?.joinToString() ?: item.recommendation.author

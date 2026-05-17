@@ -19,10 +19,52 @@ class ClubBookRecommendationEngine(
         val aiRecommendations = geminiService.recommend(context, request, recentRecommendationTitles)
             .filterNot { ai -> context.readBooks.any { it.title.equals(ai.title, ignoreCase = true) } }
 
-        return aiRecommendations
+        val validatedFromAi = aiRecommendations
             .mapNotNull { ai -> validateWithGoogleBooks(ai) }
             .distinctBy { it.bookItem.id ?: it.recommendation.title.lowercase() }
             .take(request.maxResults)
+
+        if (validatedFromAi.isNotEmpty()) return validatedFromAi
+        return fallbackRecommendations(context, request, recentRecommendationTitles)
+    }
+
+    private suspend fun fallbackRecommendations(
+        context: ClubRecommendationContext,
+        request: RecommendationRequest,
+        recentRecommendationTitles: List<String>
+    ): List<ValidatedRecommendation> {
+        val theme = request.userPrompt.takeIf { it.isNotBlank() }
+            ?: context.predominantGenres.firstOrNull()
+            ?: context.recurringTags.firstOrNull()
+            ?: "ficção"
+
+        val response = RetrofitInstance.api.searchBooks(
+            query = theme,
+            maxResults = 12,
+            apiKey = RetrofitInstance.apiKey
+        )
+
+        return response.body()?.items
+            .orEmpty()
+            .asSequence()
+            .filter { item ->
+                val title = item.volumeInfo?.title.orEmpty()
+                title.isNotBlank() &&
+                    context.readBooks.none { it.title.equals(title, ignoreCase = true) } &&
+                    recentRecommendationTitles.none { it.equals(title, ignoreCase = true) }
+            }
+            .map { item ->
+                val title = item.volumeInfo?.title.orEmpty()
+                val author = item.volumeInfo?.authors?.joinToString().orEmpty()
+                val reason = "Sugestão baseada no tema \"$theme\" e no perfil do clube."
+                ValidatedRecommendation(
+                    recommendation = AiBookRecommendation(title = title, author = author, reason = reason),
+                    bookItem = item
+                )
+            }
+            .distinctBy { it.bookItem.id ?: it.recommendation.title.lowercase() }
+            .take(request.maxResults)
+            .toList()
     }
 
     private suspend fun validateWithGoogleBooks(aiRecommendation: AiBookRecommendation): ValidatedRecommendation? {
