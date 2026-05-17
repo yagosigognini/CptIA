@@ -88,7 +88,6 @@ class MainActivity : ComponentActivity() {
                     AppThemeMode.DARK -> AppCompatDelegate.MODE_NIGHT_YES
                 }
                 AppCompatDelegate.setDefaultNightMode(nightMode)
-                delegate.applyDayNight()
             }
 
             CapitularIATheme(darkTheme = isDarkTheme) {
