@@ -8,7 +8,7 @@ import br.com.CapitularIA.data.ValidatedRecommendation
 import br.com.CapitularIA.network.RetrofitInstance
 
 class ClubBookRecommendationEngine(
-    private val geminiService: GeminiRecommendationService = GeminiRecommendationService()
+    private val recommendationApiService: RecommendationApiService = RecommendationApiService()
 ) {
 
     suspend fun recommendBooks(
@@ -16,7 +16,7 @@ class ClubBookRecommendationEngine(
         request: RecommendationRequest,
         recentRecommendationTitles: List<String>
     ): List<ValidatedRecommendation> {
-        val aiRecommendations = geminiService.recommend(context, request, recentRecommendationTitles)
+        val aiRecommendations = recommendationApiService.recommend(context, request, recentRecommendationTitles)
             .filterNot { ai -> context.readBooks.any { it.title.equals(ai.title, ignoreCase = true) } }
 
         val validatedFromAi = aiRecommendations
