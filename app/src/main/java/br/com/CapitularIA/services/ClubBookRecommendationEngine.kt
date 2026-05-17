@@ -6,9 +6,10 @@ import br.com.CapitularIA.data.ClubRecommendationContext
 import br.com.CapitularIA.data.RecommendationRequest
 import br.com.CapitularIA.data.ValidatedRecommendation
 import br.com.CapitularIA.network.RetrofitInstance
+import java.text.Normalizer
 
 class ClubBookRecommendationEngine(
-    private val geminiService: GeminiRecommendationService = GeminiRecommendationService()
+    private val recommendationApiService: RecommendationApiService = RecommendationApiService()
 ) {
 
     suspend fun recommendBooks(
@@ -16,7 +17,7 @@ class ClubBookRecommendationEngine(
         request: RecommendationRequest,
         recentRecommendationTitles: List<String>
     ): List<ValidatedRecommendation> {
-        val aiRecommendations = geminiService.recommend(context, request, recentRecommendationTitles)
+        val aiRecommendations = recommendationApiService.recommend(context, request, recentRecommendationTitles)
             .filterNot { ai -> context.readBooks.any { it.title.equals(ai.title, ignoreCase = true) } }
 
         val validatedFromAi = aiRecommendations
@@ -25,6 +26,11 @@ class ClubBookRecommendationEngine(
             .take(request.maxResults)
 
         if (validatedFromAi.isNotEmpty()) return validatedFromAi
+
+        // Se a IA retornou sugestões, evitamos cair no fallback amplo do Google Books
+        // para não perder aderência ao pedido do usuário.
+        if (aiRecommendations.isNotEmpty()) return emptyList()
+
         return fallbackRecommendations(context, request, recentRecommendationTitles)
     }
 
@@ -81,13 +87,31 @@ class ClubBookRecommendationEngine(
             apiKey = RetrofitInstance.apiKey
         )
 
+        val expectedTitle = aiRecommendation.title.normalizedForMatch()
+        val expectedAuthor = aiRecommendation.author.normalizedForMatch()
+
         val validated: BookItem = response.body()?.items
             ?.firstOrNull { item ->
-                val title = item.volumeInfo?.title.orEmpty()
-                title.equals(aiRecommendation.title, ignoreCase = true)
+                val title = item.volumeInfo?.title.orEmpty().normalizedForMatch()
+                val authors = item.volumeInfo?.authors.orEmpty().joinToString(" ").normalizedForMatch()
+
+                val titleMatches = title == expectedTitle ||
+                    title.contains(expectedTitle) ||
+                    expectedTitle.contains(title)
+
+                val authorMatches = expectedAuthor.isBlank() ||
+                    authors.contains(expectedAuthor) ||
+                    expectedAuthor.contains(authors)
+
+                titleMatches && authorMatches
             }
             ?: return null
 
         return ValidatedRecommendation(aiRecommendation, validated)
     }
 }
+
+private fun String.normalizedForMatch(): String =
+    Normalizer.normalize(trim(), Normalizer.Form.NFD)
+        .replace("\\p{M}+".toRegex(), "")
+        .lowercase()
