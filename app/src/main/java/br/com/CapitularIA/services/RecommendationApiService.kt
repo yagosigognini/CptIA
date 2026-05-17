@@ -41,7 +41,7 @@ data class RecommendationApiResponse(
     val recommendations: List<AiBookRecommendation> = emptyList()
 )
 
-private interface RecommendationBackendApi {
+interface RecommendationBackendApi {
     @POST("recommendations")
     suspend fun recommend(@Body payload: RecommendationApiPayload): RecommendationApiResponse
 }

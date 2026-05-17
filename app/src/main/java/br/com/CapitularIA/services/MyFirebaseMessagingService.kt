@@ -45,6 +45,20 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         sendNotification(title, body, deepLinkUri)
     }
 
+    private fun buildDeepLinkFromData(data: MutableMap<String, String>): String {
+        // Tenta construir o Deep Link com base em chaves conhecidas do payload de dados
+        val clubId = data["clubId"]
+        if (!clubId.isNullOrBlank()) return "capitularia://club/$clubId"
+
+        val userId = data["userId"]
+        if (!userId.isNullOrBlank()) return "capitularia://profile/$userId"
+
+        val tabIndex = data["tabIndex"]
+        if (!tabIndex.isNullOrBlank()) return "capitularia://friends?tab=$tabIndex"
+
+        return "" // Retorna vazio se não conseguir identificar o destino
+    }
+
     /**
      * Chamado quando o FCM gera um novo token para o dispositivo.
      */
