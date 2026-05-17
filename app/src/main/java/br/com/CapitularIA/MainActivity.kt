@@ -61,6 +61,7 @@ import androidx.core.content.ContextCompat
 import android.Manifest
 import android.content.pm.PackageManager
 import android.content.Intent
+import androidx.appcompat.app.AppCompatDelegate
 import androidx.navigation.NavHostController
 import androidx.navigation.navDeepLink
 
@@ -78,6 +79,15 @@ class MainActivity : ComponentActivity() {
                 AppThemeMode.SYSTEM -> androidx.compose.foundation.isSystemInDarkTheme()
                 AppThemeMode.LIGHT -> false
                 AppThemeMode.DARK -> true
+            }
+
+            LaunchedEffect(appThemeMode) {
+                val nightMode = when (appThemeMode) {
+                    AppThemeMode.SYSTEM -> AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM
+                    AppThemeMode.LIGHT -> AppCompatDelegate.MODE_NIGHT_NO
+                    AppThemeMode.DARK -> AppCompatDelegate.MODE_NIGHT_YES
+                }
+                AppCompatDelegate.setDefaultNightMode(nightMode)
             }
 
             CapitularIATheme(darkTheme = isDarkTheme) {
