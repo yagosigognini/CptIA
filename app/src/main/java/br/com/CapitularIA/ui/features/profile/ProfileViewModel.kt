@@ -20,12 +20,11 @@ import br.com.CapitularIA.data.UserTitle
 import br.com.CapitularIA.data.UserAchievement
 import br.com.CapitularIA.data.getBestAvailableImageUrl
 import br.com.CapitularIA.data.FriendRequest
-import br.com.CapitularIA.services.AchievementService
+import br.com.CapitularIA.services.GamificationService
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.firestore.Query
-import com.google.firebase.firestore.SetOptions
 import com.google.firebase.firestore.ktx.firestore
 import com.google.firebase.ktx.Firebase
 import com.google.firebase.storage.ktx.storage
@@ -51,14 +50,7 @@ class ProfileViewModel : ViewModel() {
     private val db = Firebase.firestore
     private val auth = Firebase.auth
     private val storage = Firebase.storage
-    private val achievementService = AchievementService(db)
-
-    private val xpByAction = mapOf(
-        UserActionType.RATE_BOOK to 10L,
-        UserActionType.MARK_BOOK_AS_FINISHED to 50L,
-        UserActionType.SEND_GROUP_MESSAGE to 5L,
-        UserActionType.READING_CHECKIN to 20L
-    )
+    private val gamificationService = GamificationService(db)
 
     // Listeners
     private var clubsListener: ListenerRegistration? = null
@@ -390,106 +382,9 @@ class ProfileViewModel : ViewModel() {
         }
     }
 
-    private fun registerUserAction(
-        userId: String,
-        actionId: String,
-        actionType: UserActionType,
-        metadata: Map<String, Any?> = emptyMap()
-    ) {
-        val actionPayload = mapOf(
-            "userId" to userId,
-            "actionType" to actionType.name,
-            "metadata" to metadata,
-            "createdAt" to FieldValue.serverTimestamp()
-        )
-        db.collection("user_actions").document(actionId).set(actionPayload, SetOptions.merge())
-    }
-
-    private fun grantXpAndProgress(
-        userId: String,
-        actionType: UserActionType,
-        actionId: String,
-        metadata: Map<String, Any?> = emptyMap()
-    ) {
-        val gainedXp = xpByAction[actionType] ?: return
-        val userRef = db.collection("users").document(userId)
-        val actionRef = db.collection("user_actions").document(actionId)
-
-        db.runTransaction { transaction ->
-            val existingActionSnapshot = transaction.get(actionRef)
-            if (existingActionSnapshot.exists()) return@runTransaction false
-
-            val userSnapshot = transaction.get(userRef)
-            val currentXp = userSnapshot.getLong("totalXp") ?: 0L
-            val updatedXp = currentXp + gainedXp
-            transaction.update(userRef, "totalXp", updatedXp)
-
-            val finishedCount = userSnapshot.getLong("finishedBooksCount") ?: 0L
-            val ratedCount = userSnapshot.getLong("ratedBooksCount") ?: 0L
-            val messageCount = userSnapshot.getLong("groupMessageCount") ?: 0L
-            val checkinCount = userSnapshot.getLong("readingCheckinCount") ?: 0L
-
-            when (actionType) {
-                UserActionType.RATE_BOOK -> transaction.update(userRef, "ratedBooksCount", ratedCount + 1)
-                UserActionType.MARK_BOOK_AS_FINISHED -> transaction.update(userRef, "finishedBooksCount", finishedCount + 1)
-                UserActionType.SEND_GROUP_MESSAGE -> transaction.update(userRef, "groupMessageCount", messageCount + 1)
-                UserActionType.READING_CHECKIN -> transaction.update(userRef, "readingCheckinCount", checkinCount + 1)
-                else -> Unit
-            }
-            transaction.set(
-                actionRef,
-                mapOf(
-                    "userId" to userId,
-                    "actionType" to actionType.name,
-                    "metadata" to metadata,
-                    "createdAt" to FieldValue.serverTimestamp()
-                ),
-                SetOptions.merge()
-            )
-            true
-        }.addOnSuccessListener { applied ->
-            if (applied) {
-                unlockTitlesIfEligible(userId)
-                viewModelScope.launch { achievementService.evaluateAndPersist(userId, actionType) }
-                loadUserProfile(userId)
-            }
-        }
-    }
 
     private fun buildActionId(actionType: UserActionType, userId: String, suffix: String): String {
         return "${actionType.name}_${userId}_$suffix"
-    }
-
-    private fun unlockTitlesIfEligible(userId: String) {
-        val userRef = db.collection("users").document(userId)
-        userRef.get().addOnSuccessListener { snapshot ->
-            val finishedCount = snapshot.getLong("finishedBooksCount") ?: 0L
-            val ratedCount = snapshot.getLong("ratedBooksCount") ?: 0L
-            val messageCount = snapshot.getLong("groupMessageCount") ?: 0L
-            val checkinCount = snapshot.getLong("readingCheckinCount") ?: 0L
-
-            val eligibleTitles = mutableListOf<String>()
-            if (finishedCount >= 1) eligibleTitles.add("Leitor Iniciante")
-            if (ratedCount >= 5) eligibleTitles.add("Crítico Literário")
-            if (messageCount >= 20) eligibleTitles.add("Participante Ativo")
-            if (checkinCount >= 7) eligibleTitles.add("Leitor Constante")
-
-            eligibleTitles.forEach { titleName ->
-                val titleDoc = db.collection("users").document(userId).collection("titles").document(titleName)
-                titleDoc.get().addOnSuccessListener { existing ->
-                    if (!existing.exists()) {
-                        titleDoc.set(
-                            mapOf(
-                                "userId" to userId,
-                                "titleName" to titleName,
-                                "unlockedAt" to FieldValue.serverTimestamp(),
-                                "isEquipped" to false
-                            )
-                        )
-                    }
-                }
-            }
-        }
     }
 
     fun updateBookReadingStatus(book: ProfileRatedBook, status: ReadingStatus) {
@@ -525,7 +420,8 @@ class ProfileViewModel : ViewModel() {
                         "${book.id}_${status.name}"
                     )
                     val metadata = mapOf("bookId" to book.googleBookId, "status" to status.name)
-                    grantXpAndProgress(userId, UserActionType.MARK_BOOK_AS_FINISHED, actionId, metadata)
+                    gamificationService.processAction(userId, UserActionType.MARK_BOOK_AS_FINISHED, metadata, actionId)
+                    loadUserProfile(userId)
                 } else {
                     if (wasFinished && !isNowFinished) {
                         val userRef = db.collection("users").document(userId)
@@ -543,11 +439,11 @@ class ProfileViewModel : ViewModel() {
                         UserActionType.MARK_BOOK_AS_READING
                     }
                     val actionId = buildActionId(actionType, userId, "${book.id}_${status.name}")
-                    registerUserAction(
-                        userId,
-                        actionId,
-                        actionType,
-                        mapOf("bookId" to book.googleBookId, "status" to status.name)
+                    gamificationService.processAction(
+                        userId = userId,
+                        actionType = actionType,
+                        metadata = mapOf("bookId" to book.googleBookId, "status" to status.name),
+                        idempotencyKey = actionId
                     )
                     loadUserProfile(userId)
                 }
@@ -651,7 +547,10 @@ class ProfileViewModel : ViewModel() {
                 val checkinDateKey = now.toLocalDate().toString()
                 val actionId = buildActionId(UserActionType.READING_CHECKIN, userId, checkinDateKey)
                 val metadata = mapOf("bookId" to bookId, "pagesRead" to pagesRead)
-                grantXpAndProgress(userId, UserActionType.READING_CHECKIN, actionId, metadata)
+                viewModelScope.launch {
+                    gamificationService.processAction(userId, UserActionType.READING_CHECKIN, metadata, actionId)
+                    loadUserProfile(userId)
+                }
                 _toastMessage.value = "Leitura de hoje registrada!"
             }
         }.addOnFailureListener {
@@ -717,10 +616,18 @@ class ProfileViewModel : ViewModel() {
             .addOnSuccessListener {
                 Log.d("ProfileVM", "Livro avaliado salvo: ${book.volumeInfo?.title}")
                 val addToShelfActionId = buildActionId(UserActionType.ADD_BOOK_TO_SHELF, uid, "${ratedBookRef.id}_ADD")
-                registerUserAction(uid, addToShelfActionId, UserActionType.ADD_BOOK_TO_SHELF, mapOf("bookId" to book.id))
+                viewModelScope.launch {
+                    gamificationService.processAction(
+                        userId = uid,
+                        actionType = UserActionType.ADD_BOOK_TO_SHELF,
+                        metadata = mapOf("bookId" to book.id),
+                        idempotencyKey = addToShelfActionId
+                    )
 
-                val rateActionId = buildActionId(UserActionType.RATE_BOOK, uid, ratedBookRef.id)
-                grantXpAndProgress(uid, UserActionType.RATE_BOOK, rateActionId, mapOf("bookId" to book.id))
+                    val rateActionId = buildActionId(UserActionType.RATE_BOOK, uid, ratedBookRef.id)
+                    gamificationService.processAction(uid, UserActionType.RATE_BOOK, mapOf("bookId" to book.id), rateActionId)
+                    loadUserProfile(uid)
+                }
             }
             .addOnFailureListener { e -> Log.e("ProfileVM", "Erro ao salvar avaliação", e); _errorMessage.value = "Erro ao salvar avaliação." }
         _bookToRate.value = null
