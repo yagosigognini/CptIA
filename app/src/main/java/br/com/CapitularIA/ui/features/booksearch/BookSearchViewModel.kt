@@ -25,6 +25,7 @@ class BookSearchViewModel : ViewModel() {
 
     companion object {
         private const val MAX_BOOK_RESULTS = 12
+        private const val STRONG_RESULT_MIN_SCORE = 10
     }
 
     private val apiService = RetrofitInstance.api // Pega a instância da API
@@ -84,32 +85,50 @@ class BookSearchViewModel : ViewModel() {
                     }
 
                     val scoredBooks = books
-                        .map { book ->
+                        .mapNotNull { book ->
                             val scoreResult = calculateBookScore(book, queryBuild.normalizedTerm)
-                            if (BuildConfig.DEBUG) {
-                                Log.d(
-                                    "BookSearchVM",
-                                    "Score=${scoreResult.score} | titleExact=${scoreResult.titleExactMatch} " +
-                                        "| titlePartial=${scoreResult.titlePartialMatch} | author=${scoreResult.authorMatch} " +
-                                        "| image=${scoreResult.hasImage} | ratings=${scoreResult.hasRatings} " +
-                                        "| penalty=${scoreResult.hasMissingCoreMetadata} | title='${book.volumeInfo?.title}'"
-                                )
+                            if (scoreResult.shouldDiscardByCoreMetadata) {
+                                if (BuildConfig.DEBUG) {
+                                    Log.d(
+                                        "BookSearchVM",
+                                        "Descartado por metadados centrais ausentes: title='${book.volumeInfo?.title}' authors=${book.volumeInfo?.authors}"
+                                    )
+                                }
+                                null
+                            } else {
+                                if (BuildConfig.DEBUG) {
+                                    Log.d(
+                                        "BookSearchVM",
+                                        "Score=${scoreResult.score} | titleExact=${scoreResult.titleExactMatch} " +
+                                            "| titlePartial=${scoreResult.titlePartialMatch} | author=${scoreResult.authorMatch} " +
+                                            "| image=${scoreResult.hasImage} | ratings=${scoreResult.hasRatings} " +
+                                            "| outScope=${scoreResult.isClearlyOutOfScopeCategory} | title='${book.volumeInfo?.title}'"
+                                    )
+                                }
+                                ScoredBook(book, scoreResult.score)
                             }
-                            ScoredBook(book, scoreResult.score)
                         }
                         .sortedByDescending { it.score }
-                        .take(MAX_BOOK_RESULTS)
-                        .map { it.book }
 
-                    Log.d("BookSearchVM", "Recebidos ${books.size} livros para '${queryBuild.primaryQuery}' (termo normalizado: '${queryBuild.normalizedTerm}'). Exibindo top ${scoredBooks.size} por score.")
-                    scoredBooks.take(3).forEachIndexed { index, item ->
+                    val strongResults = scoredBooks
+                        .filter { it.score >= STRONG_RESULT_MIN_SCORE }
+                        .take(MAX_BOOK_RESULTS)
+
+                    val finalBooks = if (strongResults.isNotEmpty()) {
+                        strongResults
+                    } else {
+                        scoredBooks.take(MAX_BOOK_RESULTS)
+                    }.map { it.book }
+
+                    Log.d("BookSearchVM", "Recebidos ${books.size} livros para '${queryBuild.primaryQuery}' (termo normalizado: '${queryBuild.normalizedTerm}'). Exibindo ${finalBooks.size} livros (fortes=${strongResults.size}, totalElegiveis=${scoredBooks.size}).")
+                    finalBooks.take(3).forEachIndexed { index, item ->
                         Log.d("BookSearchVM", "Livro $index - Título: ${item.volumeInfo?.title}")
                         Log.d("BookSearchVM", "Livro $index - ImageLinks Object: ${item.volumeInfo?.imageLinks}")
                         Log.d("BookSearchVM", "Livro $index - Best URL: ${item.volumeInfo?.imageLinks.getBestAvailableImageUrl()}")
                     }
 
                     // Atualiza o estado da UI DEPOIS de logar
-                    _searchState.value = BookSearchState.Success(scoredBooks)
+                    _searchState.value = BookSearchState.Success(finalBooks)
                     Log.d("BookSearchVM", "Busca bem-sucedida (estado atualizado) para '${queryBuild.primaryQuery}'") // Log original movido para depois da atualização do estado
 
                 } else {
@@ -146,6 +165,8 @@ class BookSearchViewModel : ViewModel() {
         val titlePartialMatch = normalizedTitle.isNotBlank() && normalizedTitle.contains(normalizedTerm)
         val authorMatch = normalizedAuthors.isNotBlank() && normalizedAuthors.contains(normalizedTerm)
         val hasMissingCoreMetadata = normalizedTitle.isBlank() || authors.isEmpty()
+        val isSpecificQuery = normalizedTerm.length >= 6 || normalizedTerm.contains(" ")
+        val isClearlyOutOfScopeCategory = isSpecificQuery && isClearlyOutOfScopeCategory(book, normalizedTerm)
 
         var score = 0
         if (titleExactMatch) score += 120
@@ -153,7 +174,8 @@ class BookSearchViewModel : ViewModel() {
         if (authorMatch) score += 40
         if (hasImage) score += 12
         if (hasRatings) score += 16
-        if (hasMissingCoreMetadata) score -= 60
+        if (!hasImage) score -= 8
+        if (isClearlyOutOfScopeCategory) score -= 45
 
         return BookScoreResult(
             score = score,
@@ -162,8 +184,30 @@ class BookSearchViewModel : ViewModel() {
             authorMatch = authorMatch,
             hasImage = hasImage,
             hasRatings = hasRatings,
-            hasMissingCoreMetadata = hasMissingCoreMetadata
+            shouldDiscardByCoreMetadata = hasMissingCoreMetadata,
+            isClearlyOutOfScopeCategory = isClearlyOutOfScopeCategory
         )
+    }
+
+    private fun isClearlyOutOfScopeCategory(book: BookItem, normalizedTerm: String): Boolean {
+        val categories = book.volumeInfo?.categories.orEmpty()
+            .map { normalize(it) }
+            .filter { it.isNotBlank() }
+
+        if (categories.isEmpty()) return false
+
+        val normalizedTokens = normalizedTerm.split(" ").filter { it.length >= 3 }
+        if (normalizedTokens.isEmpty()) return false
+
+        val hasTokenInCategories = normalizedTokens.any { token ->
+            categories.any { category -> category.contains(token) }
+        }
+        if (hasTokenInCategories) return false
+
+        val outOfScopeHints = listOf("juvenile", "children", "infantil", "didatico", "textbook", "comics", "graphic")
+        return categories.any { category ->
+            outOfScopeHints.any { hint -> category.contains(hint) }
+        }
     }
 
     private fun normalize(value: String?): String {
@@ -186,5 +230,6 @@ private data class BookScoreResult(
     val authorMatch: Boolean,
     val hasImage: Boolean,
     val hasRatings: Boolean,
-    val hasMissingCoreMetadata: Boolean
+    val shouldDiscardByCoreMetadata: Boolean,
+    val isClearlyOutOfScopeCategory: Boolean
 )
