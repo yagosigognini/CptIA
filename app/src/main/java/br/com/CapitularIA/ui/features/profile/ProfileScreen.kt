@@ -20,6 +20,7 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.EmojiEvents
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.livedata.observeAsState
@@ -66,6 +67,7 @@ fun ProfileScreen(
 ) {
     LaunchedEffect(key1 = userId) { viewModel.loadUserProfile(userId) }
     var showChooseTitleDialog by remember { mutableStateOf(false) }
+    var showReadingCheckinDialog by remember { mutableStateOf(false) }
 
     // Observa os estados do ViewModel
     val user by viewModel.user.observeAsState()
@@ -143,7 +145,7 @@ fun ProfileScreen(
             onSettingsClick = onSettingsClick,
             onClubClick = onClubClick,
             onAddBookClick = onAddBookClick,
-            onReadingCheckin = { viewModel.registerReadingCheckin() },
+            onReadingCheckin = { showReadingCheckinDialog = true },
             onDeleteBookClick = { book -> viewModel.requestDeleteBook(book) },
             onSendFriendRequest = { viewModel.sendFriendRequest() },
             onFriendsListClick = onFriendsListClick,
@@ -162,6 +164,17 @@ fun ProfileScreen(
             onEquipTitle = { selectedTitle ->
                 viewModel.equipTitle(selectedTitle)
                 showChooseTitleDialog = false
+            }
+        )
+    }
+
+    if (showReadingCheckinDialog && isOwnProfile) {
+        ReadingCheckinDialog(
+            ratedBooks = ratedBooks,
+            onDismiss = { showReadingCheckinDialog = false },
+            onSubmit = { selectedBookId, pagesRead ->
+                viewModel.registerReadingCheckin(bookId = selectedBookId, pagesRead = pagesRead)
+                showReadingCheckinDialog = false
             }
         )
     }
@@ -529,6 +542,109 @@ private fun ChooseTitleDialog(
                         }
                     }
                 }
+            }
+        }
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ReadingCheckinDialog(
+    ratedBooks: List<ProfileRatedBook>,
+    onDismiss: () -> Unit,
+    onSubmit: (bookId: String?, pagesRead: Int?) -> Unit
+) {
+    var readTodayChecked by remember { mutableStateOf(false) }
+    var selectedBookId by remember { mutableStateOf<String?>(null) }
+    var pagesInput by remember { mutableStateOf("") }
+    var isBookSelectorExpanded by remember { mutableStateOf(false) }
+
+    val parsedPages = pagesInput.toIntOrNull()
+    val isPagesValid = pagesInput.isBlank() || (parsedPages != null && parsedPages >= 1)
+    val canSubmit = readTodayChecked && isPagesValid
+    val selectedBookTitle = ratedBooks.firstOrNull { it.googleBookId == selectedBookId }?.title ?: "Nenhum livro"
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Check-in de leitura") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(
+                        checked = readTodayChecked,
+                        onCheckedChange = { readTodayChecked = it }
+                    )
+                    Text("Li hoje")
+                }
+
+                ExposedDropdownMenuBox(
+                    expanded = isBookSelectorExpanded,
+                    onExpandedChange = { isBookSelectorExpanded = it }
+                ) {
+                    OutlinedTextField(
+                        value = selectedBookTitle,
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Livro da estante (opcional)") },
+                        trailingIcon = { Icon(Icons.Default.ArrowDropDown, contentDescription = null) },
+                        modifier = Modifier
+                            .menuAnchor()
+                            .fillMaxWidth()
+                    )
+                    ExposedDropdownMenu(
+                        expanded = isBookSelectorExpanded,
+                        onDismissRequest = { isBookSelectorExpanded = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Nenhum livro") },
+                            onClick = {
+                                selectedBookId = null
+                                isBookSelectorExpanded = false
+                            }
+                        )
+                        ratedBooks.forEach { book ->
+                            DropdownMenuItem(
+                                text = { Text(book.title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                                onClick = {
+                                    selectedBookId = book.googleBookId.ifBlank { null }
+                                    isBookSelectorExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+
+                OutlinedTextField(
+                    value = pagesInput,
+                    onValueChange = { value ->
+                        if (value.all { it.isDigit() }) {
+                            pagesInput = value
+                        }
+                    },
+                    label = { Text("Páginas lidas (opcional)") },
+                    singleLine = true,
+                    isError = !isPagesValid,
+                    supportingText = {
+                        if (!isPagesValid) {
+                            Text("Informe um valor maior ou igual a 1.")
+                        }
+                    }
+                )
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancelar")
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    onSubmit(selectedBookId, parsedPages)
+                },
+                enabled = canSubmit
+            ) {
+                Text("Registrar")
             }
         }
     )
