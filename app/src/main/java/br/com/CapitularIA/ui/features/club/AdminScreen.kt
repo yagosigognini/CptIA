@@ -290,14 +290,14 @@ fun ConfigTab(
             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.errorContainer)
         ) {
             Text(
-                text = if (isAdmin) "Transferir Administração" else "Sair do Clube",
+                text = "Sair do Clube",
                 color = MaterialTheme.colorScheme.onErrorContainer
             )
         }
 
         if (isAdmin) {
             Text(
-                "Admins não podem sair, devem transferir a administração.",
+                "Admins não podem sair do clube pelo app.",
                 style = MaterialTheme.typography.labelSmall,
                 modifier = Modifier.padding(top = 4.dp),
                 color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -403,9 +403,6 @@ fun MemberItem(
 
             if (currentUserIsAdmin && !isThisMemberAdmin) {
                 Column(horizontalAlignment = Alignment.End) {
-                    TextButton(onClick = onTransferAdmin) {
-                        Text("Tornar admin")
-                    }
                     TextButton(onClick = onKick) {
                         Text("Expulsar", color = MaterialTheme.colorScheme.error)
                     }
