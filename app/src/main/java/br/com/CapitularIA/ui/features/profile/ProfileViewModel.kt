@@ -496,22 +496,29 @@ class ProfileViewModel : ViewModel() {
         val userId = auth.currentUser?.uid ?: return
         if (book.id.isBlank()) return
 
-        val updates = mutableMapOf<String, Any>("readingStatus" to status.name)
-        if (status == ReadingStatus.FINISHED) {
-            updates["finishedAt"] = FieldValue.serverTimestamp()
-        }
+        viewModelScope.launch {
+            try {
+                val ratedBookRef = db.collection("users").document(userId)
+                    .collection("rated_books").document(book.id)
 
-        db.collection("users").document(userId)
-            .collection("rated_books").document(book.id)
-            .update(updates)
-            .addOnSuccessListener {
-                val actionType = if (status == ReadingStatus.FINISHED) {
-                    UserActionType.MARK_BOOK_AS_FINISHED
-                } else {
-                    UserActionType.MARK_BOOK_AS_READING
+                val currentSnapshot = ratedBookRef.get().await()
+                if (!currentSnapshot.exists()) {
+                    _errorMessage.value = "Livro não encontrado para atualização de status."
+                    return@launch
                 }
-                val wasFinished = book.readingStatus == ReadingStatus.FINISHED.name
-                if (status == ReadingStatus.FINISHED && !wasFinished) {
+
+                val previousStatus = currentSnapshot.getString("readingStatus")
+                val wasFinished = previousStatus == ReadingStatus.FINISHED.name
+                val isNowFinished = status == ReadingStatus.FINISHED
+
+                val updates = mutableMapOf<String, Any>("readingStatus" to status.name)
+                if (isNowFinished) {
+                    updates["finishedAt"] = FieldValue.serverTimestamp()
+                }
+
+                ratedBookRef.update(updates).await()
+
+                if (!wasFinished && isNowFinished) {
                     val actionId = buildActionId(
                         UserActionType.MARK_BOOK_AS_FINISHED,
                         userId,
@@ -520,10 +527,35 @@ class ProfileViewModel : ViewModel() {
                     val metadata = mapOf("bookId" to book.googleBookId, "status" to status.name)
                     grantXpAndProgress(userId, UserActionType.MARK_BOOK_AS_FINISHED, actionId, metadata)
                 } else {
+                    if (wasFinished && !isNowFinished) {
+                        val userRef = db.collection("users").document(userId)
+                        db.runTransaction { transaction ->
+                            val userSnapshot = transaction.get(userRef)
+                            val finishedCount = userSnapshot.getLong("finishedBooksCount") ?: 0L
+                            val updatedCount = (finishedCount - 1).coerceAtLeast(0)
+                            transaction.update(userRef, "finishedBooksCount", updatedCount)
+                        }.await()
+                    }
+
+                    val actionType = if (isNowFinished) {
+                        UserActionType.MARK_BOOK_AS_FINISHED
+                    } else {
+                        UserActionType.MARK_BOOK_AS_READING
+                    }
                     val actionId = buildActionId(actionType, userId, "${book.id}_${status.name}")
-                    registerUserAction(userId, actionId, actionType, mapOf("bookId" to book.googleBookId, "status" to status.name))
+                    registerUserAction(
+                        userId,
+                        actionId,
+                        actionType,
+                        mapOf("bookId" to book.googleBookId, "status" to status.name)
+                    )
+                    loadUserProfile(userId)
                 }
+            } catch (e: Exception) {
+                Log.e("ProfileVM", "Erro ao atualizar status de leitura", e)
+                _errorMessage.value = "Erro ao atualizar status do livro."
             }
+        }
     }
 
     fun equipTitle(title: UserTitle) {
