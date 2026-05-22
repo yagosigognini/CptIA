@@ -1,10 +1,13 @@
 package br.com.CapitularIA.ui.features.auth
 
+import android.os.Build
 import android.util.Log
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import br.com.CapitularIA.data.UserActionType
+import br.com.CapitularIA.services.GamificationService
 import com.google.firebase.auth.AuthCredential
 import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.auth.ktx.auth
@@ -12,6 +15,8 @@ import com.google.firebase.firestore.ktx.firestore
 import com.google.firebase.ktx.Firebase
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import java.time.ZoneOffset
+import java.time.ZonedDateTime
 import java.util.Locale
 import br.com.CapitularIA.services.updateFcmTokenForCurrentUser
 
@@ -26,6 +31,7 @@ class AuthViewModel : ViewModel() {
 
     private val auth = Firebase.auth
     private val firestore = Firebase.firestore
+    private val gamificationService = GamificationService(firestore)
 
     private val _authResult = MutableLiveData<AuthResult>(AuthResult.IDLE)
     val authResult: LiveData<AuthResult> = _authResult
@@ -42,6 +48,7 @@ class AuthViewModel : ViewModel() {
                 val result = auth.signInWithEmailAndPassword(email, password).await()
                 val user = result.user
                 if (user != null && user.isEmailVerified) {
+                    registerLoginActionIfNeeded(user.uid, LoginMethod.EMAIL)
                     updateFcmTokenForCurrentUser()
                     _authResult.value = AuthResult.SUCCESS
                     onLoginSuccess()
@@ -135,6 +142,9 @@ class AuthViewModel : ViewModel() {
                 }
 
                 // Se for um usuário existente, ele só faz o login
+                if (user != null) {
+                    registerLoginActionIfNeeded(user.uid, LoginMethod.GOOGLE)
+                }
                 updateFcmTokenForCurrentUser()
                 _authResult.value = AuthResult.SUCCESS
                 onLoginSuccess()
@@ -171,6 +181,50 @@ class AuthViewModel : ViewModel() {
 
     fun resetAuthResult() {
         _authResult.value = AuthResult.IDLE
+    }
+
+    private suspend fun registerLoginActionIfNeeded(userId: String, loginMethod: LoginMethod) {
+        val actionDate = ZonedDateTime.now(ZoneOffset.UTC).toLocalDate().toString()
+        val actionId = "${UserActionType.LOGIN_APP.name}_${userId}_$actionDate"
+        val metadata = buildLoginMetadata(loginMethod)
+
+        runCatching {
+            gamificationService.processAction(
+                userId = userId,
+                actionType = UserActionType.LOGIN_APP,
+                metadata = metadata,
+                idempotencyKey = actionId
+            )
+        }.onFailure { exception ->
+            Log.w(TAG, "Falha ao registrar ação de login", exception)
+        }
+    }
+
+    private fun buildLoginMetadata(loginMethod: LoginMethod): Map<String, Any> {
+        val metadata = mutableMapOf<String, Any>(
+            "platform" to "android",
+            "loginMethod" to loginMethod.value
+        )
+
+        val appVersion = runCatching {
+            val packageInfo = auth.app.applicationContext.packageManager.getPackageInfo(
+                auth.app.applicationContext.packageName,
+                0
+            )
+            packageInfo.versionName
+        }.getOrNull()
+
+        if (!appVersion.isNullOrBlank()) {
+            metadata["appVersion"] = appVersion
+        }
+
+        metadata["osVersion"] = Build.VERSION.RELEASE ?: "unknown"
+        return metadata
+    }
+
+    private enum class LoginMethod(val value: String) {
+        EMAIL("email_password"),
+        GOOGLE("google")
     }
 
     companion object {
