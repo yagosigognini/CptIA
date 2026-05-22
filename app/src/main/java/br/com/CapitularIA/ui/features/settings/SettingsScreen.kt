@@ -124,7 +124,7 @@ fun SettingsScreenContent(
                 // Seção de Preferências
                 Text("Preferências", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(modifier = Modifier.height(8.dp))
-                ThemeSelectorRow(currentThemeMode = currentThemeMode, onThemeModeChange = onThemeModeChange)
+                ThemeSystemRow()
 
                 Spacer(modifier = Modifier.height(24.dp))
 
@@ -305,24 +305,10 @@ fun TermsAndPoliciesScreen(
 }
 
 @Composable
-private fun ThemeSelectorRow(currentThemeMode: AppThemeMode, onThemeModeChange: (AppThemeMode) -> Unit) {
-    var expanded by remember { mutableStateOf(false) }
-    val label = when (currentThemeMode) {
-        AppThemeMode.SYSTEM -> "Padrão do sistema"
-        AppThemeMode.LIGHT -> "Claro"
-        AppThemeMode.DARK -> "Escuro"
-    }
-
+private fun ThemeSystemRow() {
     Row(Modifier.fillMaxWidth().padding(vertical = 16.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
         Text("Tema", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Box {
-            TextButton(onClick = { expanded = true }) { Text(label) }
-            DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                DropdownMenuItem(text = { Text("Padrão do sistema") }, onClick = { onThemeModeChange(AppThemeMode.SYSTEM); expanded = false })
-                DropdownMenuItem(text = { Text("Claro") }, onClick = { onThemeModeChange(AppThemeMode.LIGHT); expanded = false })
-                DropdownMenuItem(text = { Text("Escuro") }, onClick = { onThemeModeChange(AppThemeMode.DARK); expanded = false })
-            }
-        }
+        Text("Padrão do sistema", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
     HorizontalDivider()
 }
