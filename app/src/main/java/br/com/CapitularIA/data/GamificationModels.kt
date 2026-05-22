@@ -49,7 +49,17 @@ enum class AchievementType {
     BOOKS,
     RATINGS,
     SOCIAL,
-    CONSISTENCY
+    CONSISTENCY,
+    AI,
+    SECRET
+}
+
+enum class AchievementRarity {
+    COMMON,
+    UNCOMMON,
+    RARE,
+    EPIC,
+    LEGENDARY
 }
 
 data class AchievementDefinition(
@@ -59,6 +69,7 @@ data class AchievementDefinition(
     val criteria: String,
     val icon: String,
     val type: AchievementType,
+    val rarity: AchievementRarity = AchievementRarity.COMMON,
     val requiredProgress: Long
 )
 

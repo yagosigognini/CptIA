@@ -46,6 +46,7 @@ import br.com.CapitularIA.data.ReadingStatus
 import br.com.CapitularIA.data.User
 import br.com.CapitularIA.data.UserTitle
 import br.com.CapitularIA.data.UserAchievement
+import br.com.CapitularIA.data.AchievementRarity
 import br.com.CapitularIA.services.AchievementCatalog
 import br.com.CapitularIA.data.sampleClubsList
 import br.com.CapitularIA.data.sampleRatedBooks
@@ -1009,9 +1010,11 @@ fun RatedBookItemOtherProfilePreview() {
 private fun AchievementsSection(achievements: List<UserAchievement>) {
     val byId = achievements.associateBy { it.achievementId }
     val catalog = AchievementCatalog.initial
+    val unlockedCount = catalog.count { byId[it.id]?.unlocked == true }
 
     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
         Text("Conquistas", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        Text("Desbloqueadas: $unlockedCount/${catalog.size}", style = MaterialTheme.typography.bodySmall)
         Spacer(Modifier.height(8.dp))
         catalog.forEach { item ->
             val progress = byId[item.id]?.progress ?: 0L
@@ -1021,9 +1024,18 @@ private fun AchievementsSection(achievements: List<UserAchievement>) {
                     Text("${item.icon} ${item.name}", fontWeight = FontWeight.SemiBold)
                     Text(item.description, style = MaterialTheme.typography.bodySmall)
                     Text("Critério: ${item.criteria}", style = MaterialTheme.typography.bodySmall)
+                    Text("Raridade: ${item.rarity.label()}", style = MaterialTheme.typography.bodySmall)
                     Text(if (unlocked) "Status: Desbloqueada" else "Status: Em progresso (${progress}/${item.requiredProgress})", style = MaterialTheme.typography.bodySmall)
                 }
             }
         }
     }
+}
+
+private fun AchievementRarity.label(): String = when (this) {
+    AchievementRarity.COMMON -> "⚪ Comum"
+    AchievementRarity.UNCOMMON -> "🟢 Incomum"
+    AchievementRarity.RARE -> "🔵 Rara"
+    AchievementRarity.EPIC -> "🟣 Épica"
+    AchievementRarity.LEGENDARY -> "🟡 Lendária"
 }
