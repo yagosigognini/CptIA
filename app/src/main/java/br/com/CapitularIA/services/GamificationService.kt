@@ -1,9 +1,11 @@
 package br.com.CapitularIA.services
 
 import br.com.CapitularIA.data.UserActionType
+import android.util.Log
 import com.google.firebase.Timestamp
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.SetOptions
 import kotlinx.coroutines.tasks.await
 import java.time.Instant
 import java.time.LocalDate
@@ -13,6 +15,7 @@ class GamificationService(
     private val db: FirebaseFirestore,
     private val achievementService: AchievementService = AchievementService(db)
 ) {
+    private val tag = "GamificationService"
     private val socialXpDailyCap = 50L
     private val socialXpDayField = "socialXpDayUtc"
     private val socialXpTodayField = "socialXpToday"
@@ -40,6 +43,20 @@ class GamificationService(
             }
 
             val userSnapshot = transaction.get(userRef)
+            if (!userSnapshot.exists()) {
+                transaction.set(
+                    userRef,
+                    mapOf(
+                        "totalXp" to 0L,
+                        "finishedBooksCount" to 0L,
+                        "ratedBooksCount" to 0L,
+                        "groupMessageCount" to 0L,
+                        "readingCheckinCount" to 0L,
+                        "currentStreak" to 0L
+                    ),
+                    SetOptions.merge()
+                )
+            }
             val currentXp = userSnapshot.getLong("totalXp") ?: 0L
             val finishedCount = userSnapshot.getLong("finishedBooksCount") ?: 0L
             val ratedCount = userSnapshot.getLong("ratedBooksCount") ?: 0L
@@ -96,6 +113,7 @@ class GamificationService(
 
         unlockTitlesIfEligible(userId)
         achievementService.evaluateAndPersist(userId, actionType)
+        Log.d(tag, "Ação processada: user=$userId action=$actionType id=$idempotencyKey")
         return true
     }
 
