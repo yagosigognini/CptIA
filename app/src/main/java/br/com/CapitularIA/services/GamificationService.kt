@@ -13,6 +13,9 @@ class GamificationService(
     private val db: FirebaseFirestore,
     private val achievementService: AchievementService = AchievementService(db)
 ) {
+    private val socialXpDailyCap = 50L
+    private val socialXpDayField = "socialXpDayUtc"
+    private val socialXpTodayField = "socialXpToday"
 
     private val xpByAction = mapOf(
         UserActionType.RATE_BOOK to 10L,
@@ -43,7 +46,24 @@ class GamificationService(
             val messageCount = userSnapshot.getLong("groupMessageCount") ?: 0L
             val checkinCount = userSnapshot.getLong("readingCheckinCount") ?: 0L
 
-            val gainedXp = xpByAction[actionType] ?: 0L
+            val gainedXpBase = xpByAction[actionType] ?: 0L
+            val gainedXp = if (actionType == UserActionType.SEND_GROUP_MESSAGE) {
+                val today = LocalDate.now(ZoneOffset.UTC).toString()
+                val storedDay = userSnapshot.getString(socialXpDayField)
+                val todaySocialXp = if (storedDay == today) userSnapshot.getLong(socialXpTodayField) ?: 0L else 0L
+                val remaining = (socialXpDailyCap - todaySocialXp).coerceAtLeast(0L)
+                val xpToGrant = gainedXpBase.coerceAtMost(remaining)
+                transaction.update(
+                    userRef,
+                    mapOf(
+                        socialXpDayField to today,
+                        socialXpTodayField to (todaySocialXp + xpToGrant)
+                    )
+                )
+                xpToGrant
+            } else {
+                gainedXpBase
+            }
             if (gainedXp > 0) {
                 // `totalXp` é uma projeção agregada derivada da trilha em `user_actions`.
                 // Atualizamos por incremento para leitura rápida em perfil/ranking.
@@ -102,7 +122,8 @@ class GamificationService(
             val actionName = doc.getString("actionType") ?: return@forEach
             val actionType = runCatching { UserActionType.valueOf(actionName) }.getOrNull() ?: return@forEach
 
-            totalXp += xpByAction[actionType] ?: 0L
+            val xpForAction = if (actionType == UserActionType.SEND_GROUP_MESSAGE) 0L else (xpByAction[actionType] ?: 0L)
+            totalXp += xpForAction
             when (actionType) {
                 UserActionType.RATE_BOOK -> ratedCount++
                 UserActionType.MARK_BOOK_AS_FINISHED -> finishedCount++

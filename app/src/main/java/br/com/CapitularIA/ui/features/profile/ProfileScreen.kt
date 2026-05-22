@@ -40,9 +40,11 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import br.com.CapitularIA.data.BookClub
 import br.com.CapitularIA.data.ProfileRatedBook
+import br.com.CapitularIA.data.ReadingStatus
 import br.com.CapitularIA.data.User
 import br.com.CapitularIA.data.UserTitle
 import br.com.CapitularIA.data.UserAchievement
+import br.com.CapitularIA.data.AchievementRarity
 import br.com.CapitularIA.services.AchievementCatalog
 import br.com.CapitularIA.data.sampleClubsList
 import br.com.CapitularIA.data.sampleRatedBooks
@@ -70,6 +72,7 @@ fun ProfileScreen(
     LaunchedEffect(key1 = userId) { viewModel.loadUserProfile(userId) }
     var showChooseTitleDialog by remember { mutableStateOf(false) }
     var showReadingCheckinDialog by remember { mutableStateOf(false) }
+    var showAchievementsDialog by remember { mutableStateOf(false) }
 
     // Observa os estados do ViewModel
     val user by viewModel.user.observeAsState()
@@ -150,13 +153,15 @@ fun ProfileScreen(
             onAddBookClick = onAddBookClick,
             onReadingCheckin = { showReadingCheckinDialog = true },
             onDeleteBookClick = { book -> viewModel.requestDeleteBook(book) },
+            onUpdateReadingStatus = { book, status -> viewModel.updateBookReadingStatus(book, status) },
             onSendFriendRequest = { viewModel.sendFriendRequest() },
             onFriendsListClick = onFriendsListClick,
             onRemoveFriendRequest = { viewModel.requestRemoveFriend() },
             unlockedTitles = unlockedTitles,
             isLoadingTitles = isLoadingTitles,
             onChooseTitleClick = { showChooseTitleDialog = true },
-            achievements = achievements
+            achievements = achievements,
+            onOpenAchievements = { showAchievementsDialog = true }
         )
     }
 
@@ -167,6 +172,10 @@ fun ProfileScreen(
             onDismiss = { showChooseTitleDialog = false },
             onEquipTitle = { selectedTitle ->
                 viewModel.equipTitle(selectedTitle)
+                showChooseTitleDialog = false
+            },
+            onUnequipTitle = {
+                viewModel.unequipTitle()
                 showChooseTitleDialog = false
             }
         )
@@ -179,6 +188,21 @@ fun ProfileScreen(
             onSubmit = { selectedBookId, pagesRead ->
                 viewModel.registerReadingCheckin(bookId = selectedBookId, pagesRead = pagesRead)
                 showReadingCheckinDialog = false
+            }
+        )
+    }
+
+    if (showAchievementsDialog) {
+        AlertDialog(
+            onDismissRequest = { showAchievementsDialog = false },
+            title = { Text("Conquistas") },
+            text = {
+                Box(modifier = Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
+                    AchievementsSection(achievements = achievements)
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showAchievementsDialog = false }) { Text("Fechar") }
             }
         )
     }
@@ -201,13 +225,15 @@ fun ProfileScreenContent(
     onAddBookClick: () -> Unit,
     onReadingCheckin: () -> Unit,
     onDeleteBookClick: (ProfileRatedBook) -> Unit,
+    onUpdateReadingStatus: (ProfileRatedBook, ReadingStatus) -> Unit,
     onSendFriendRequest: () -> Unit,
     onFriendsListClick: () -> Unit,
     onRemoveFriendRequest: () -> Unit,
     unlockedTitles: List<UserTitle>,
     isLoadingTitles: Boolean,
     onChooseTitleClick: () -> Unit,
-    achievements: List<UserAchievement>
+    achievements: List<UserAchievement>,
+    onOpenAchievements: () -> Unit
 ) {
     AppBackground(backgroundResId = R.drawable.background) {
         Scaffold(
@@ -273,14 +299,12 @@ fun ProfileScreenContent(
                 }
                 // Item 2: A Estante
                 item {
-                    AchievementsSection(achievements = achievements)
-                }
-                item {
                     ChecklistSection(
                         ratedBooks = ratedBooks,
                         onAddBookClick = onAddBookClick,
                         isOwnProfile = isOwnProfile,
-                        onDeleteBookClick = onDeleteBookClick
+                        onDeleteBookClick = onDeleteBookClick,
+                        onUpdateReadingStatus = onUpdateReadingStatus
                     )
                 }
                 // Item 3: Os Clubes
@@ -335,9 +359,9 @@ fun ProfileHeader(
 
         // Nome
         Text(text = user.name, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        val level = (user.totalXp / 100) + 1
-        val xpForCurrentLevel = (level - 1) * 100
-        val xpForNextLevel = level * 100
+        val level = calculateLevelFromXp(user.totalXp)
+        val xpForCurrentLevel = xpRequiredForLevel(level)
+        val xpForNextLevel = xpRequiredForLevel(level + 1)
         ElevatedCard(modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text("Gamificação", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
@@ -348,8 +372,11 @@ fun ProfileHeader(
                 Text("Título equipado: ${user.equippedTitle.ifBlank { "Nenhum" }}")
             }
         }
+        Spacer(modifier = Modifier.height(8.dp))
+        OutlinedButton(onClick = onOpenAchievements, modifier = Modifier.fillMaxWidth()) {
+            Text("Ver conquistas")
+        }
         Spacer(modifier = Modifier.height(10.dp))
-        UnlockedTitlesSection(unlockedTitles = unlockedTitles, isLoadingTitles = isLoadingTitles)
         if (isOwnProfile) {
             Spacer(modifier = Modifier.height(8.dp))
             OutlinedButton(onClick = onReadingCheckin) {
@@ -501,7 +528,8 @@ private fun ChooseTitleDialog(
     unlockedTitles: List<UserTitle>,
     currentEquippedTitle: String,
     onDismiss: () -> Unit,
-    onEquipTitle: (UserTitle) -> Unit
+    onEquipTitle: (UserTitle) -> Unit,
+    onUnequipTitle: () -> Unit
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -514,7 +542,11 @@ private fun ChooseTitleDialog(
             if (unlockedTitles.isEmpty()) {
                 Text("Você ainda não desbloqueou títulos.")
             } else {
-                LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(onClick = onUnequipTitle, modifier = Modifier.fillMaxWidth()) {
+                        Text("Não usar título")
+                    }
+                    LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(unlockedTitles.size) { index ->
                         val title = unlockedTitles[index]
                         val isEquipped = title.isEquipped || title.titleName == currentEquippedTitle
@@ -549,6 +581,7 @@ private fun ChooseTitleDialog(
                             }
                         }
                     }
+                }
                 }
             }
         }
@@ -666,13 +699,33 @@ private fun getFriendlyLevelName(level: Long): String = when (level) {
     else -> "Lenda Literária"
 }
 
+private fun xpRequiredForLevel(level: Long): Long {
+    if (level <= 1L) return 0L
+    var acc = 0.0
+    var step = 100.0
+    for (l in 2..level) {
+        acc += step
+        step *= 1.25
+    }
+    return acc.toLong()
+}
+
+private fun calculateLevelFromXp(totalXp: Long): Long {
+    var level = 1L
+    while (totalXp >= xpRequiredForLevel(level + 1)) {
+        level++
+    }
+    return level
+}
+
 // Seção da Estante (Checklist)
 @Composable
 fun ChecklistSection(
     ratedBooks: List<ProfileRatedBook>,
     onAddBookClick: () -> Unit,
     isOwnProfile: Boolean,
-    onDeleteBookClick: (ProfileRatedBook) -> Unit
+    onDeleteBookClick: (ProfileRatedBook) -> Unit,
+    onUpdateReadingStatus: (ProfileRatedBook, ReadingStatus) -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -729,6 +782,7 @@ fun ChecklistSection(
                     RatedBookItem(
                         book = book,
                         onDeleteClick = { onDeleteBookClick(book) },
+                        onUpdateReadingStatus = { status -> onUpdateReadingStatus(book, status) },
                         isOwnProfile = isOwnProfile
                     )
                 }
@@ -744,6 +798,7 @@ fun ChecklistSection(
 fun RatedBookItem(
     book: ProfileRatedBook,
     onDeleteClick: () -> Unit,
+    onUpdateReadingStatus: (ReadingStatus) -> Unit,
     isOwnProfile: Boolean, // ✅ CORREÇÃO: Parâmetro adicionado
     modifier: Modifier = Modifier
 ) {
@@ -797,6 +852,25 @@ fun RatedBookItem(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
+            if (isOwnProfile) {
+                var expanded by remember { mutableStateOf(false) }
+                Box(modifier = Modifier.padding(bottom = 6.dp)) {
+                    TextButton(onClick = { expanded = true }) {
+                        Text("Status: ${ReadingStatus.valueOf(book.readingStatus).label}", fontSize = 11.sp)
+                    }
+                    DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                        ReadingStatus.entries.forEach { status ->
+                            DropdownMenuItem(
+                                text = { Text(status.label) },
+                                onClick = {
+                                    expanded = false
+                                    onUpdateReadingStatus(status)
+                                }
+                            )
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -821,13 +895,15 @@ fun ProfileScreenPreview() {
             onAddBookClick = {},
             onReadingCheckin = {},
             onDeleteBookClick = {},
+            onUpdateReadingStatus = { _, _ -> },
             onSendFriendRequest = {},
             onFriendsListClick = {},
             onRemoveFriendRequest = {},
             unlockedTitles = emptyList(),
             isLoadingTitles = false,
             onChooseTitleClick = {},
-            achievements = emptyList()
+            achievements = emptyList(),
+            onOpenAchievements = {}
         )
     }
 }
@@ -849,13 +925,15 @@ fun OtherProfileScreenNotFriendPreview() {
             onAddBookClick = {},
             onReadingCheckin = {},
             onDeleteBookClick = {},
+            onUpdateReadingStatus = { _, _ -> },
             onSendFriendRequest = {},
             onFriendsListClick = {},
             onRemoveFriendRequest = {},
             unlockedTitles = emptyList(),
             isLoadingTitles = false,
             onChooseTitleClick = {},
-            achievements = emptyList()
+            achievements = emptyList(),
+            onOpenAchievements = {}
         )
     }
 }
@@ -877,13 +955,15 @@ fun OtherProfileScreenRequestSentPreview() {
             onAddBookClick = {},
             onReadingCheckin = {},
             onDeleteBookClick = {},
+            onUpdateReadingStatus = { _, _ -> },
             onSendFriendRequest = {},
             onFriendsListClick = {},
             onRemoveFriendRequest = {},
             unlockedTitles = emptyList(),
             isLoadingTitles = false,
             onChooseTitleClick = {},
-            achievements = emptyList()
+            achievements = emptyList(),
+            onOpenAchievements = {}
         )
     }
 }
@@ -899,6 +979,7 @@ fun RatedBookItemPreview() {
                 rating = 4.5f
             ),
             onDeleteClick = {},
+            onUpdateReadingStatus = {},
             isOwnProfile = true // ✅ CORREÇÃO: Adicionado ao Preview
         )
     }
@@ -915,6 +996,7 @@ fun RatedBookItemOtherProfilePreview() {
                 rating = 4.5f
             ),
             onDeleteClick = {},
+            onUpdateReadingStatus = {},
             isOwnProfile = false // ✅ CORREÇÃO: Testando sem permissão de delete
         )
     }
@@ -924,9 +1006,11 @@ fun RatedBookItemOtherProfilePreview() {
 private fun AchievementsSection(achievements: List<UserAchievement>) {
     val byId = achievements.associateBy { it.achievementId }
     val catalog = AchievementCatalog.initial
+    val unlockedCount = catalog.count { byId[it.id]?.unlocked == true }
 
     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
         Text("Conquistas", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        Text("Desbloqueadas: $unlockedCount/${catalog.size}", style = MaterialTheme.typography.bodySmall)
         Spacer(Modifier.height(8.dp))
         catalog.forEach { item ->
             val progress = byId[item.id]?.progress ?: 0L
@@ -936,9 +1020,18 @@ private fun AchievementsSection(achievements: List<UserAchievement>) {
                     Text("${item.icon} ${item.name}", fontWeight = FontWeight.SemiBold)
                     Text(item.description, style = MaterialTheme.typography.bodySmall)
                     Text("Critério: ${item.criteria}", style = MaterialTheme.typography.bodySmall)
+                    Text("Raridade: ${item.rarity.label()}", style = MaterialTheme.typography.bodySmall)
                     Text(if (unlocked) "Status: Desbloqueada" else "Status: Em progresso (${progress}/${item.requiredProgress})", style = MaterialTheme.typography.bodySmall)
                 }
             }
         }
     }
+}
+
+private fun AchievementRarity.label(): String = when (this) {
+    AchievementRarity.COMMON -> "⚪ Comum"
+    AchievementRarity.UNCOMMON -> "🟢 Incomum"
+    AchievementRarity.RARE -> "🔵 Rara"
+    AchievementRarity.EPIC -> "🟣 Épica"
+    AchievementRarity.LEGENDARY -> "🟡 Lendária"
 }

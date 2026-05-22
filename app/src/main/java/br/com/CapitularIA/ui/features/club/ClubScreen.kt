@@ -118,6 +118,7 @@ fun ClubScreen(
     val bookPendingIndication by viewModel.bookPendingIndication // Observa o livro pendente vindo da busca
     val recommendations by viewModel.recommendations.observeAsState(emptyList())
     val isLoadingRecommendations by viewModel.isLoadingRecommendations.observeAsState(false)
+    val currentUserGamification by viewModel.currentUserGamification.observeAsState()
 
     var inputText by remember { mutableStateOf("") } // Estado local para o campo de mensagem
     var isQuickMenuExpanded by rememberSaveable { mutableStateOf(false) }
@@ -171,6 +172,7 @@ fun ClubScreen(
             isLoadingRecommendations = isLoadingRecommendations,
             recommendationInput = recommendationInput,
             onRecommendationInputChange = { recommendationInput = it },
+            currentUserGamification = currentUserGamification,
             onRequestRecommendations = {
                 val chatContext = messages
                     .asReversed()
@@ -655,13 +657,14 @@ private fun QuickActionDialog(
     isLoadingRecommendations: Boolean,
     recommendationInput: String,
     onRecommendationInputChange: (String) -> Unit,
+    currentUserGamification: User?,
     onRequestRecommendations: () -> Unit,
     onDismiss: () -> Unit
 ) {
     val (title, message) = when (action) {
         QuickAction.Recommendation -> "Pedir recomendação" to ""
         QuickAction.History -> "Histórico do clube" to formatHistory(club)
-        QuickAction.Gamification -> "Gamificação" to "Conquistas como Leitor da Madrugada e Fominha aparecem aqui conforme participação no chat e leitura."
+        QuickAction.Gamification -> "Gamificação" to ""
     }
 
     AlertDialog(
@@ -703,12 +706,46 @@ private fun QuickActionDialog(
                         }
                     }
                 }
+            } else if (action == QuickAction.Gamification) {
+                val user = currentUserGamification
+                val totalXp = user?.totalXp ?: 0L
+                val level = calculateLevelFromXp(totalXp)
+                val xpCurrent = xpRequiredForLevel(level)
+                val xpNext = xpRequiredForLevel(level + 1)
+                val xpProgress = totalXp - xpCurrent
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Nível $level")
+                    Text("XP: $xpProgress / ${xpNext - xpCurrent}")
+                    Text("Título equipado: ${user?.equippedTitle?.ifBlank { "Nenhum" } ?: "Nenhum"}")
+                    Text("Streak atual: ${user?.currentStreak ?: 0}")
+                    Text("Livros concluídos: ${user?.finishedBooksCount ?: 0}")
+                    Text("Ações no clube e leitura diária geram progresso de conquistas.")
+                }
             } else {
                 Text(message)
             }
         },
         confirmButton = { Button(onClick = onDismiss) { Text("Fechar") } }
     )
+}
+
+private fun xpRequiredForLevel(level: Long): Long {
+    if (level <= 1L) return 0L
+    var acc = 0.0
+    var step = 100.0
+    for (l in 2..level) {
+        acc += step
+        step *= 1.25
+    }
+    return acc.toLong()
+}
+
+private fun calculateLevelFromXp(totalXp: Long): Long {
+    var level = 1L
+    while (totalXp >= xpRequiredForLevel(level + 1)) {
+        level++
+    }
+    return level
 }
 
 private fun formatHistory(club: BookClub?): String {

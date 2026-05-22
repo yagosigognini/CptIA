@@ -499,6 +499,30 @@ class ProfileViewModel : ViewModel() {
         }
     }
 
+    fun unequipTitle() {
+        val userId = auth.currentUser?.uid ?: return
+        if (_isOwnProfile.value != true) return
+        viewModelScope.launch {
+            try {
+                val userRef = db.collection("users").document(userId)
+                val titlesRef = userRef.collection("titles")
+                val allTitlesSnapshot = titlesRef.get().await()
+                val batch = db.batch()
+                allTitlesSnapshot.documents.forEach { doc ->
+                    batch.update(doc.reference, "isEquipped", false)
+                }
+                batch.update(userRef, "equippedTitle", "")
+                batch.commit().await()
+                _user.value = _user.value?.copy(equippedTitle = "")
+                _unlockedTitles.value = allTitlesSnapshot.toObjects(UserTitle::class.java).map { it.copy(isEquipped = false) }
+                _toastMessage.value = "Título desequipado."
+            } catch (e: Exception) {
+                Log.e("ProfileVM", "Erro ao desequipar título", e)
+                _errorMessage.value = "Não foi possível desequipar o título."
+            }
+        }
+    }
+
     fun registerReadingCheckin(bookId: String? = null, pagesRead: Int? = null) {
         val userId = auth.currentUser?.uid ?: return
         val userRef = db.collection("users").document(userId)

@@ -290,14 +290,14 @@ fun ConfigTab(
             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.errorContainer)
         ) {
             Text(
-                text = if (isAdmin) "Transferir Administração" else "Sair do Clube",
+                text = "Sair do Clube",
                 color = MaterialTheme.colorScheme.onErrorContainer
             )
         }
 
         if (isAdmin) {
             Text(
-                "Admins não podem sair, devem transferir a administração.",
+                "Admins não podem sair do clube pelo app.",
                 style = MaterialTheme.typography.labelSmall,
                 modifier = Modifier.padding(top = 4.dp),
                 color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -375,6 +375,7 @@ fun MemberItem(
     onTransferAdmin: () -> Unit,
     onProfileClick: () -> Unit // ✅ ADICIONADO
 ) {
+    var showTransferAdminDialog by remember { mutableStateOf(false) }
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -403,7 +404,7 @@ fun MemberItem(
 
             if (currentUserIsAdmin && !isThisMemberAdmin) {
                 Column(horizontalAlignment = Alignment.End) {
-                    TextButton(onClick = onTransferAdmin) {
+                    TextButton(onClick = { showTransferAdminDialog = true }) {
                         Text("Tornar admin")
                     }
                     TextButton(onClick = onKick) {
@@ -412,6 +413,27 @@ fun MemberItem(
                 }
             }
         }
+    }
+
+    if (showTransferAdminDialog) {
+        AlertDialog(
+            onDismissRequest = { showTransferAdminDialog = false },
+            title = { Text("Transferir administração") },
+            text = { Text("Deseja tornar ${user.name} o novo admin do clube?") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showTransferAdminDialog = false
+                    onTransferAdmin()
+                }) {
+                    Text("Confirmar")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showTransferAdminDialog = false }) {
+                    Text("Cancelar")
+                }
+            }
+        )
     }
 }
 

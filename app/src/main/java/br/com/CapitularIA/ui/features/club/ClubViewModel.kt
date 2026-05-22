@@ -72,6 +72,8 @@ class ClubViewModel : ViewModel() {
 
     private val _isLoadingRecommendations = MutableLiveData(false)
     val isLoadingRecommendations: LiveData<Boolean> = _isLoadingRecommendations
+    private val _currentUserGamification = MutableLiveData<User?>(null)
+    val currentUserGamification: LiveData<User?> = _currentUserGamification
 
     fun loadClubAndMessages(clubId: String) {
         _isLoading.value = true
@@ -82,6 +84,7 @@ class ClubViewModel : ViewModel() {
             _recommendations.value = emptyList()
         }
         this.currentClubId = clubId // Guarda o ID
+        fetchCurrentUserGamification()
 
         // Limpa listeners antigos antes de registrar novos
         clubListener?.remove()
@@ -138,6 +141,13 @@ class ClubViewModel : ViewModel() {
                     _isLoading.value = false
                 }
             }
+    }
+
+    private fun fetchCurrentUserGamification() {
+        val userId = auth.currentUser?.uid ?: return
+        db.collection("users").document(userId).get()
+            .addOnSuccessListener { snap -> _currentUserGamification.value = snap.toObject(User::class.java) }
+            .addOnFailureListener { _currentUserGamification.value = null }
     }
 
     private fun listenForMessages(clubId: String) {
