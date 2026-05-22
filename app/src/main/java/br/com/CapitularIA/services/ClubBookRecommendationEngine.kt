@@ -72,9 +72,8 @@ class ClubBookRecommendationEngine(
             books = fallbackResponse.body()?.items.orEmpty()
         }
 
-        val readAndRecentKeys = (context.readBooks.map { it.title to it.author } +
-            recentRecommendationTitles.map { it to "" })
-            .map { (title, author) -> normalizedBookKey(title, author) }
+        val readAndRecentKeys = (context.readBooks.map { it.title } + recentRecommendationTitles)
+            .map { normalizedBookKey(it, "") }
             .toSet()
 
         val scored = books
@@ -91,8 +90,9 @@ class ClubBookRecommendationEngine(
             .mapNotNull { item ->
                 val title = item.volumeInfo?.title.orEmpty()
                 val author = item.volumeInfo?.authors?.joinToString().orEmpty()
-                val bookKey = normalizedBookKey(title, author)
-                if (title.isBlank() || readAndRecentKeys.contains(bookKey)) {
+                // Comparamos apenas pelo título para exclusão, pois o histórico não possui autores.
+                val titleKey = normalizedBookKey(title, "")
+                if (title.isBlank() || readAndRecentKeys.contains(titleKey)) {
                     null
                 } else {
                     val reason = "Sugestão baseada no tema \"$theme\" e no perfil do clube."

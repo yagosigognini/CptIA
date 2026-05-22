@@ -212,7 +212,7 @@ class ClubViewModel : ViewModel() {
                 title = bookItem.volumeInfo?.title ?: "Título Desconhecido",
                 author = bookItem.volumeInfo?.authors?.joinToString(", ") ?: "Autor Desconhecido",
                 publisher = bookItem.volumeInfo?.publisher ?: "",
-                coverUrl = bookItem.volumeInfo?.imageLinks.getBestAvailableImageUrl() ?: "" // Pega a melhor URL
+                coverUrl = bookItem.volumeInfo?.imageLinks.getBestAvailableImageUrl() // Pega a melhor URL
             )
 
             // Calcula a data final

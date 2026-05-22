@@ -45,7 +45,6 @@ data class ImageLinks(
 ) : Parcelable // ⬅️ IMPLEMENTAR
 
 // Função utilitária para pegar a melhor URL de imagem disponível
-fun ImageLinks?.getBestAvailableImageUrl(): String? {
-    // Esta função não muda
-    return this?.thumbnail ?: this?.smallThumbnail ?: this?.small ?: this?.medium ?: this?.large ?: this?.extraLarge
+fun ImageLinks?.getBestAvailableImageUrl(): String {
+    return this?.thumbnail ?: this?.smallThumbnail ?: this?.small ?: this?.medium ?: this?.large ?: this?.extraLarge ?: ""
 }
