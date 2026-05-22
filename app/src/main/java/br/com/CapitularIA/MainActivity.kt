@@ -73,21 +73,11 @@ class MainActivity : ComponentActivity() {
         installSplashScreen()
 
         setContent {
-            val prefs = remember { getSharedPreferences("app_settings", MODE_PRIVATE) }
-            var appThemeMode by remember { mutableStateOf(AppThemeMode.fromStorage(prefs.getString("theme_mode", AppThemeMode.SYSTEM.storageValue))) }
-            val isDarkTheme = when (appThemeMode) {
-                AppThemeMode.SYSTEM -> androidx.compose.foundation.isSystemInDarkTheme()
-                AppThemeMode.LIGHT -> false
-                AppThemeMode.DARK -> true
-            }
+            val appThemeMode = AppThemeMode.SYSTEM
+            val isDarkTheme = androidx.compose.foundation.isSystemInDarkTheme()
 
-            LaunchedEffect(appThemeMode) {
-                val nightMode = when (appThemeMode) {
-                    AppThemeMode.SYSTEM -> AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM
-                    AppThemeMode.LIGHT -> AppCompatDelegate.MODE_NIGHT_NO
-                    AppThemeMode.DARK -> AppCompatDelegate.MODE_NIGHT_YES
-                }
-                AppCompatDelegate.setDefaultNightMode(nightMode)
+            LaunchedEffect(Unit) {
+                AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM)
             }
 
             CapitularIATheme(darkTheme = isDarkTheme) {
@@ -98,10 +88,7 @@ class MainActivity : ComponentActivity() {
                     navController = navController,
                     clubIdFromNotification = clubIdFromNotification,
                     appThemeMode = appThemeMode,
-                    onThemeModeChange = { mode ->
-                        appThemeMode = mode
-                        prefs.edit().putString("theme_mode", mode.storageValue).apply()
-                    }
+                    onThemeModeChange = { _ -> }
                 )
             }
         }
