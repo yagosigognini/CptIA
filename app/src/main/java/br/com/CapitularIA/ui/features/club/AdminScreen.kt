@@ -403,9 +403,6 @@ fun MemberItem(
 
             if (currentUserIsAdmin && !isThisMemberAdmin) {
                 Column(horizontalAlignment = Alignment.End) {
-                    TextButton(onClick = onTransferAdmin) {
-                        Text("Tornar admin")
-                    }
                     TextButton(onClick = onKick) {
                         Text("Expulsar", color = MaterialTheme.colorScheme.error)
                     }
