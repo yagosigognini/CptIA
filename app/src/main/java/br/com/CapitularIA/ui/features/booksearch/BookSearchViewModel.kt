@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import br.com.CapitularIA.data.BookItem // Importa o modelo do livro
 import br.com.CapitularIA.data.getBestAvailableImageUrl
 import br.com.CapitularIA.network.RetrofitInstance // Importa nossa instância do Retrofit
+import br.com.CapitularIA.services.search.BookSearchQueryBuilder
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -32,7 +33,8 @@ class BookSearchViewModel : ViewModel() {
      * @param query O termo a ser buscado (título, autor, etc.).
      */
     fun searchBooks(query: String) {
-        if (query.isBlank()) {
+        val queryBuild = BookSearchQueryBuilder.build(query)
+        if (queryBuild.primaryQuery.isBlank()) {
             _searchState.value = BookSearchState.Idle // Limpa se a busca for vazia
             return
         }
@@ -42,7 +44,7 @@ class BookSearchViewModel : ViewModel() {
             try {
                 // Busca principal com filtros para melhorar precisão
                 val response = apiService.searchBooks(
-                    query = query,
+                    query = queryBuild.primaryQuery,
                     maxResults = 20,
                     langRestrict = "pt",
                     printType = "books",
@@ -57,16 +59,16 @@ class BookSearchViewModel : ViewModel() {
 
                     // Fallback sem filtros caso a busca filtrada não retorne nada
                     if (books.isEmpty()) {
-                        Log.d("BookSearchVM", "Busca filtrada vazia para '$query'. Tentando fallback sem filtros.")
+                        Log.d("BookSearchVM", "Busca filtrada vazia para '${queryBuild.primaryQuery}'. Tentando fallback sem filtros com '${queryBuild.fallbackQuery}'.")
                         val fallbackResponse = apiService.searchBooks(
-                            query = query,
+                            query = queryBuild.fallbackQuery,
                             maxResults = 20,
                             apiKey = apiKey
                         )
 
                         if (fallbackResponse.isSuccessful) {
                             books = fallbackResponse.body()?.items ?: emptyList()
-                            Log.d("BookSearchVM", "Fallback retornou ${books.size} livros para '$query'.")
+                            Log.d("BookSearchVM", "Fallback retornou ${books.size} livros para '${queryBuild.fallbackQuery}'.")
                         } else {
                             Log.w(
                                 "BookSearchVM",
@@ -76,7 +78,7 @@ class BookSearchViewModel : ViewModel() {
                     }
 
                     // ⬇️ --- LOGS ADICIONADOS --- ⬇️
-                    Log.d("BookSearchVM", "Recebidos ${books.size} livros para '$query'.")
+                    Log.d("BookSearchVM", "Recebidos ${books.size} livros para '${queryBuild.primaryQuery}' (termo normalizado: '${queryBuild.normalizedTerm}').")
                     books.take(3).forEachIndexed { index, item -> // Loga os 3 primeiros
                         Log.d("BookSearchVM", "Livro $index - Título: ${item.volumeInfo?.title}")
                         // Loga o objeto imageLinks inteiro para ver todas as URLs
@@ -88,7 +90,7 @@ class BookSearchViewModel : ViewModel() {
 
                     // Atualiza o estado da UI DEPOIS de logar
                     _searchState.value = BookSearchState.Success(books)
-                    Log.d("BookSearchVM", "Busca bem-sucedida (estado atualizado) para '$query'") // Log original movido para depois da atualização do estado
+                    Log.d("BookSearchVM", "Busca bem-sucedida (estado atualizado) para '${queryBuild.primaryQuery}'") // Log original movido para depois da atualização do estado
 
                 } else {
                     // Erro HTTP (ex: 404, 500)
