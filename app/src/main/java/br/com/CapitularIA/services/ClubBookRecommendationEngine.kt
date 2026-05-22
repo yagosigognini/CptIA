@@ -6,6 +6,7 @@ import br.com.CapitularIA.data.ClubRecommendationContext
 import br.com.CapitularIA.data.RecommendationRequest
 import br.com.CapitularIA.data.ValidatedRecommendation
 import br.com.CapitularIA.network.RetrofitInstance
+import br.com.CapitularIA.services.search.BookSearchQueryBuilder
 import java.text.Normalizer
 
 class ClubBookRecommendationEngine(
@@ -44,31 +45,63 @@ class ClubBookRecommendationEngine(
             ?: context.recurringTags.firstOrNull()
             ?: "ficção"
 
-        val response = RetrofitInstance.api.searchBooks(
-            query = theme,
-            maxResults = 12,
+        val queryBuild = BookSearchQueryBuilder.build(theme)
+        if (queryBuild.primaryQuery.isBlank()) return emptyList()
+
+        val primaryResponse = RetrofitInstance.api.searchBooks(
+            query = queryBuild.primaryQuery,
+            maxResults = 20,
+            langRestrict = "pt",
+            printType = "books",
+            orderBy = "relevance",
+            projection = "full",
             apiKey = RetrofitInstance.apiKey
         )
 
-        return response.body()?.items
-            .orEmpty()
-            .asSequence()
-            .filter { item ->
-                val title = item.volumeInfo?.title.orEmpty()
-                title.isNotBlank() &&
-                    context.readBooks.none { it.title.equals(title, ignoreCase = true) } &&
-                    recentRecommendationTitles.none { it.equals(title, ignoreCase = true) }
+        var books = primaryResponse.body()?.items.orEmpty()
+        if (books.isEmpty()) {
+            val fallbackResponse = RetrofitInstance.api.searchBooks(
+                query = queryBuild.fallbackQuery,
+                maxResults = 20,
+                langRestrict = "pt",
+                printType = "books",
+                orderBy = "relevance",
+                projection = "full",
+                apiKey = RetrofitInstance.apiKey
+            )
+            books = fallbackResponse.body()?.items.orEmpty()
+        }
+
+        val readAndRecentKeys = (context.readBooks.map { it.title to it.author } +
+            recentRecommendationTitles.map { it to "" })
+            .map { (title, author) -> normalizedBookKey(title, author) }
+            .toSet()
+
+        val scored = books
+            .mapNotNull { item ->
+                val score = calculateFallbackBookScore(item, queryBuild.normalizedTerm)
+                if (score.shouldDiscardByCoreMetadata) null else ScoredFallbackBook(item, score.score)
             }
-            .map { item ->
+            .sortedByDescending { it.score }
+
+        return scored
+            .asSequence()
+            .map { it.book }
+            .distinctBy { it.id ?: normalizedBookKey(it.volumeInfo?.title.orEmpty(), it.volumeInfo?.authors.orEmpty().joinToString(" ")) }
+            .mapNotNull { item ->
                 val title = item.volumeInfo?.title.orEmpty()
                 val author = item.volumeInfo?.authors?.joinToString().orEmpty()
-                val reason = "Sugestão baseada no tema \"$theme\" e no perfil do clube."
-                ValidatedRecommendation(
-                    recommendation = AiBookRecommendation(title = title, author = author, reason = reason),
-                    bookItem = item
-                )
+                val bookKey = normalizedBookKey(title, author)
+                if (title.isBlank() || readAndRecentKeys.contains(bookKey)) {
+                    null
+                } else {
+                    val reason = "Sugestão baseada no tema \"$theme\" e no perfil do clube."
+                    ValidatedRecommendation(
+                        recommendation = AiBookRecommendation(title = title, author = author, reason = reason),
+                        bookItem = item
+                    )
+                }
             }
-            .distinctBy { it.bookItem.id ?: it.recommendation.title.lowercase() }
             .take(request.maxResults)
             .toList()
     }
@@ -111,7 +144,48 @@ class ClubBookRecommendationEngine(
     }
 }
 
-private fun String.normalizedForMatch(): String =
-    Normalizer.normalize(trim(), Normalizer.Form.NFD)
+private data class ScoredFallbackBook(
+    val book: BookItem,
+    val score: Int
+)
+
+private data class FallbackBookScoreResult(
+    val score: Int,
+    val shouldDiscardByCoreMetadata: Boolean
+)
+
+private fun calculateFallbackBookScore(book: BookItem, normalizedTerm: String): FallbackBookScoreResult {
+    val volumeInfo = book.volumeInfo
+    val normalizedTitle = normalizeForFallback(volumeInfo?.title)
+    val authors = volumeInfo?.authors.orEmpty()
+    val normalizedAuthors = authors.joinToString(" ") { normalizeForFallback(it) }
+    val hasMissingCoreMetadata = normalizedTitle.isBlank() || authors.isEmpty()
+    val titleExactMatch = normalizedTitle.isNotBlank() && normalizedTitle == normalizedTerm
+    val titlePartialMatch = normalizedTitle.isNotBlank() && normalizedTitle.contains(normalizedTerm)
+    val authorMatch = normalizedAuthors.isNotBlank() && normalizedAuthors.contains(normalizedTerm)
+
+    var score = 0
+    if (titleExactMatch) score += 120
+    if (titlePartialMatch) score += 70
+    if (authorMatch) score += 40
+
+    return FallbackBookScoreResult(
+        score = score,
+        shouldDiscardByCoreMetadata = hasMissingCoreMetadata
+    )
+}
+
+private fun normalizedBookKey(title: String?, author: String?): String {
+    val normalizedTitle = normalizeForFallback(title)
+    val normalizedAuthor = normalizeForFallback(author)
+    return "$normalizedTitle::$normalizedAuthor"
+}
+
+private fun normalizeForFallback(value: String?): String =
+    Normalizer.normalize(value.orEmpty(), Normalizer.Form.NFD)
         .replace("\\p{M}+".toRegex(), "")
         .lowercase()
+        .trim()
+
+private fun String.normalizedForMatch(): String =
+    normalizeForFallback(this)
