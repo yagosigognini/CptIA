@@ -3,10 +3,12 @@ package br.com.CapitularIA.ui.features.booksearch
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import br.com.CapitularIA.BuildConfig
 import br.com.CapitularIA.data.BookItem // Importa o modelo do livro
 import br.com.CapitularIA.data.getBestAvailableImageUrl
 import br.com.CapitularIA.network.RetrofitInstance // Importa nossa instância do Retrofit
 import br.com.CapitularIA.services.search.BookSearchQueryBuilder
+import java.text.Normalizer
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -20,6 +22,10 @@ sealed class BookSearchState {
 }
 
 class BookSearchViewModel : ViewModel() {
+
+    companion object {
+        private const val MAX_BOOK_RESULTS = 12
+    }
 
     private val apiService = RetrofitInstance.api // Pega a instância da API
     private val apiKey = RetrofitInstance.apiKey // Pega a chave da API
@@ -77,19 +83,33 @@ class BookSearchViewModel : ViewModel() {
                         }
                     }
 
-                    // ⬇️ --- LOGS ADICIONADOS --- ⬇️
-                    Log.d("BookSearchVM", "Recebidos ${books.size} livros para '${queryBuild.primaryQuery}' (termo normalizado: '${queryBuild.normalizedTerm}').")
-                    books.take(3).forEachIndexed { index, item -> // Loga os 3 primeiros
+                    val scoredBooks = books
+                        .map { book ->
+                            val scoreResult = calculateBookScore(book, queryBuild.normalizedTerm)
+                            if (BuildConfig.DEBUG) {
+                                Log.d(
+                                    "BookSearchVM",
+                                    "Score=${scoreResult.score} | titleExact=${scoreResult.titleExactMatch} " +
+                                        "| titlePartial=${scoreResult.titlePartialMatch} | author=${scoreResult.authorMatch} " +
+                                        "| image=${scoreResult.hasImage} | ratings=${scoreResult.hasRatings} " +
+                                        "| penalty=${scoreResult.hasMissingCoreMetadata} | title='${book.volumeInfo?.title}'"
+                                )
+                            }
+                            ScoredBook(book, scoreResult.score)
+                        }
+                        .sortedByDescending { it.score }
+                        .take(MAX_BOOK_RESULTS)
+                        .map { it.book }
+
+                    Log.d("BookSearchVM", "Recebidos ${books.size} livros para '${queryBuild.primaryQuery}' (termo normalizado: '${queryBuild.normalizedTerm}'). Exibindo top ${scoredBooks.size} por score.")
+                    scoredBooks.take(3).forEachIndexed { index, item ->
                         Log.d("BookSearchVM", "Livro $index - Título: ${item.volumeInfo?.title}")
-                        // Loga o objeto imageLinks inteiro para ver todas as URLs
                         Log.d("BookSearchVM", "Livro $index - ImageLinks Object: ${item.volumeInfo?.imageLinks}")
-                        // Loga a URL específica que sua função utilitária escolheria
                         Log.d("BookSearchVM", "Livro $index - Best URL: ${item.volumeInfo?.imageLinks.getBestAvailableImageUrl()}")
                     }
-                    // ⬆️ --- FIM DOS LOGS --- ⬆️
 
                     // Atualiza o estado da UI DEPOIS de logar
-                    _searchState.value = BookSearchState.Success(books)
+                    _searchState.value = BookSearchState.Success(scoredBooks)
                     Log.d("BookSearchVM", "Busca bem-sucedida (estado atualizado) para '${queryBuild.primaryQuery}'") // Log original movido para depois da atualização do estado
 
                 } else {
@@ -113,4 +133,58 @@ class BookSearchViewModel : ViewModel() {
     fun clearSearch() {
         _searchState.value = BookSearchState.Idle
     }
+
+    private fun calculateBookScore(book: BookItem, normalizedTerm: String): BookScoreResult {
+        val volumeInfo = book.volumeInfo
+        val normalizedTitle = normalize(volumeInfo?.title)
+        val authors = volumeInfo?.authors.orEmpty()
+        val normalizedAuthors = authors.joinToString(" ") { normalize(it) }
+        val hasImage = volumeInfo?.imageLinks.getBestAvailableImageUrl().isNotBlank()
+        val hasRatings = (volumeInfo?.ratingsCount ?: 0) > 0 && (volumeInfo?.averageRating ?: 0.0) > 0.0
+
+        val titleExactMatch = normalizedTitle.isNotBlank() && normalizedTitle == normalizedTerm
+        val titlePartialMatch = normalizedTitle.isNotBlank() && normalizedTitle.contains(normalizedTerm)
+        val authorMatch = normalizedAuthors.isNotBlank() && normalizedAuthors.contains(normalizedTerm)
+        val hasMissingCoreMetadata = normalizedTitle.isBlank() || authors.isEmpty()
+
+        var score = 0
+        if (titleExactMatch) score += 120
+        if (titlePartialMatch) score += 70
+        if (authorMatch) score += 40
+        if (hasImage) score += 12
+        if (hasRatings) score += 16
+        if (hasMissingCoreMetadata) score -= 60
+
+        return BookScoreResult(
+            score = score,
+            titleExactMatch = titleExactMatch,
+            titlePartialMatch = titlePartialMatch,
+            authorMatch = authorMatch,
+            hasImage = hasImage,
+            hasRatings = hasRatings,
+            hasMissingCoreMetadata = hasMissingCoreMetadata
+        )
+    }
+
+    private fun normalize(value: String?): String {
+        return Normalizer.normalize(value.orEmpty(), Normalizer.Form.NFD)
+            .replace("\\p{M}+".toRegex(), "")
+            .lowercase()
+            .trim()
+    }
 }
+
+private data class ScoredBook(
+    val book: BookItem,
+    val score: Int
+)
+
+private data class BookScoreResult(
+    val score: Int,
+    val titleExactMatch: Boolean,
+    val titlePartialMatch: Boolean,
+    val authorMatch: Boolean,
+    val hasImage: Boolean,
+    val hasRatings: Boolean,
+    val hasMissingCoreMetadata: Boolean
+)
