@@ -71,6 +71,7 @@ fun ProfileScreen(
     LaunchedEffect(key1 = userId) { viewModel.loadUserProfile(userId) }
     var showChooseTitleDialog by remember { mutableStateOf(false) }
     var showReadingCheckinDialog by remember { mutableStateOf(false) }
+    var showAchievementsDialog by remember { mutableStateOf(false) }
 
     // Observa os estados do ViewModel
     val user by viewModel.user.observeAsState()
@@ -158,7 +159,8 @@ fun ProfileScreen(
             unlockedTitles = unlockedTitles,
             isLoadingTitles = isLoadingTitles,
             onChooseTitleClick = { showChooseTitleDialog = true },
-            achievements = achievements
+            achievements = achievements,
+            onOpenAchievements = { showAchievementsDialog = true }
         )
     }
 
@@ -188,6 +190,21 @@ fun ProfileScreen(
             }
         )
     }
+
+    if (showAchievementsDialog) {
+        AlertDialog(
+            onDismissRequest = { showAchievementsDialog = false },
+            title = { Text("Conquistas") },
+            text = {
+                Box(modifier = Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
+                    AchievementsSection(achievements = achievements)
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showAchievementsDialog = false }) { Text("Fechar") }
+            }
+        )
+    }
 }
 
 
@@ -214,7 +231,8 @@ fun ProfileScreenContent(
     unlockedTitles: List<UserTitle>,
     isLoadingTitles: Boolean,
     onChooseTitleClick: () -> Unit,
-    achievements: List<UserAchievement>
+    achievements: List<UserAchievement>,
+    onOpenAchievements: () -> Unit
 ) {
     AppBackground(backgroundResId = R.drawable.background) {
         Scaffold(
@@ -340,9 +358,9 @@ fun ProfileHeader(
 
         // Nome
         Text(text = user.name, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        val level = (user.totalXp / 100) + 1
-        val xpForCurrentLevel = (level - 1) * 100
-        val xpForNextLevel = level * 100
+        val level = calculateLevelFromXp(user.totalXp)
+        val xpForCurrentLevel = xpRequiredForLevel(level)
+        val xpForNextLevel = xpRequiredForLevel(level + 1)
         ElevatedCard(modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text("Gamificação", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
@@ -352,6 +370,10 @@ fun ProfileHeader(
                 Text("Livros lidos: ${user.finishedBooksCount}")
                 Text("Título equipado: ${user.equippedTitle.ifBlank { "Nenhum" }}")
             }
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+        OutlinedButton(onClick = onOpenAchievements, modifier = Modifier.fillMaxWidth()) {
+            Text("Ver conquistas")
         }
         Spacer(modifier = Modifier.height(10.dp))
         if (isOwnProfile) {
@@ -676,6 +698,25 @@ private fun getFriendlyLevelName(level: Long): String = when (level) {
     else -> "Lenda Literária"
 }
 
+private fun xpRequiredForLevel(level: Long): Long {
+    if (level <= 1L) return 0L
+    var acc = 0.0
+    var step = 100.0
+    for (l in 2..level) {
+        acc += step
+        step *= 1.25
+    }
+    return acc.toLong()
+}
+
+private fun calculateLevelFromXp(totalXp: Long): Long {
+    var level = 1L
+    while (totalXp >= xpRequiredForLevel(level + 1)) {
+        level++
+    }
+    return level
+}
+
 // Seção da Estante (Checklist)
 @Composable
 fun ChecklistSection(
@@ -860,7 +901,8 @@ fun ProfileScreenPreview() {
             unlockedTitles = emptyList(),
             isLoadingTitles = false,
             onChooseTitleClick = {},
-            achievements = emptyList()
+            achievements = emptyList(),
+            onOpenAchievements = {}
         )
     }
 }
@@ -889,7 +931,8 @@ fun OtherProfileScreenNotFriendPreview() {
             unlockedTitles = emptyList(),
             isLoadingTitles = false,
             onChooseTitleClick = {},
-            achievements = emptyList()
+            achievements = emptyList(),
+            onOpenAchievements = {}
         )
     }
 }
@@ -918,7 +961,8 @@ fun OtherProfileScreenRequestSentPreview() {
             unlockedTitles = emptyList(),
             isLoadingTitles = false,
             onChooseTitleClick = {},
-            achievements = emptyList()
+            achievements = emptyList(),
+            onOpenAchievements = {}
         )
     }
 }

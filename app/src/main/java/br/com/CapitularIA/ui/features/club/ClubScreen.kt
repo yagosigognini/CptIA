@@ -708,11 +708,14 @@ private fun QuickActionDialog(
                 }
             } else if (action == QuickAction.Gamification) {
                 val user = currentUserGamification
-                val level = ((user?.totalXp ?: 0L) / 100L) + 1L
-                val xpProgress = (user?.totalXp ?: 0L) % 100L
+                val totalXp = user?.totalXp ?: 0L
+                val level = calculateLevelFromXp(totalXp)
+                val xpCurrent = xpRequiredForLevel(level)
+                val xpNext = xpRequiredForLevel(level + 1)
+                val xpProgress = totalXp - xpCurrent
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Nível $level")
-                    Text("XP: $xpProgress / 100")
+                    Text("XP: $xpProgress / ${xpNext - xpCurrent}")
                     Text("Título equipado: ${user?.equippedTitle?.ifBlank { "Nenhum" } ?: "Nenhum"}")
                     Text("Streak atual: ${user?.currentStreak ?: 0}")
                     Text("Livros concluídos: ${user?.finishedBooksCount ?: 0}")
@@ -724,6 +727,25 @@ private fun QuickActionDialog(
         },
         confirmButton = { Button(onClick = onDismiss) { Text("Fechar") } }
     )
+}
+
+private fun xpRequiredForLevel(level: Long): Long {
+    if (level <= 1L) return 0L
+    var acc = 0.0
+    var step = 100.0
+    for (l in 2..level) {
+        acc += step
+        step *= 1.25
+    }
+    return acc.toLong()
+}
+
+private fun calculateLevelFromXp(totalXp: Long): Long {
+    var level = 1L
+    while (totalXp >= xpRequiredForLevel(level + 1)) {
+        level++
+    }
+    return level
 }
 
 private fun formatHistory(club: BookClub?): String {
