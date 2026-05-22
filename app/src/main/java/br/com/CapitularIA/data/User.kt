@@ -10,5 +10,8 @@ data class User(
     val aboutMe: String = "",
     val friendCount: Long = 0,
     val favoriteGenres: List<String> = emptyList(),
-    val favoriteAuthors: List<String> = emptyList()
+    val favoriteAuthors: List<String> = emptyList(),
+    val totalXp: Long = 0,
+    val equippedTitle: String = "",
+    val currentStreak: Long = 0
 )

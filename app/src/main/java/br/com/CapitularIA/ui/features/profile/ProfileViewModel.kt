@@ -13,6 +13,8 @@ import androidx.lifecycle.viewModelScope
 import br.com.CapitularIA.data.BookClub
 import br.com.CapitularIA.data.BookItem
 import br.com.CapitularIA.data.ProfileRatedBook
+import br.com.CapitularIA.data.ReadingStatus
+import br.com.CapitularIA.data.UserActionType
 import br.com.CapitularIA.data.User
 import br.com.CapitularIA.data.getBestAvailableImageUrl
 import br.com.CapitularIA.data.FriendRequest
@@ -43,6 +45,14 @@ class ProfileViewModel : ViewModel() {
     private val db = Firebase.firestore
     private val auth = Firebase.auth
     private val storage = Firebase.storage
+
+
+    private val xpByAction = mapOf(
+        UserActionType.RATE_BOOK to 10L,
+        UserActionType.MARK_BOOK_AS_FINISHED to 50L,
+        UserActionType.SEND_GROUP_MESSAGE to 5L,
+        UserActionType.READING_CHECKIN to 20L
+    )
 
     // Listeners
     private var clubsListener: ListenerRegistration? = null
@@ -322,6 +332,105 @@ class ProfileViewModel : ViewModel() {
         }
     }
 
+    private fun registerUserAction(
+        userId: String,
+        actionType: UserActionType,
+        metadata: Map<String, Any> = emptyMap()
+    ) {
+        val actionPayload = mapOf(
+            "userId" to userId,
+            "actionType" to actionType.name,
+            "metadata" to metadata,
+            "createdAt" to FieldValue.serverTimestamp()
+        )
+        db.collection("user_actions").add(actionPayload)
+    }
+
+    private fun grantXpAndProgress(userId: String, actionType: UserActionType) {
+        val gainedXp = xpByAction[actionType] ?: return
+        val userRef = db.collection("users").document(userId)
+
+        db.runTransaction { transaction ->
+            val userSnapshot = transaction.get(userRef)
+            val currentXp = userSnapshot.getLong("totalXp") ?: 0L
+            val updatedXp = currentXp + gainedXp
+            transaction.update(userRef, "totalXp", updatedXp)
+
+            val finishedCount = userSnapshot.getLong("finishedBooksCount") ?: 0L
+            val ratedCount = userSnapshot.getLong("ratedBooksCount") ?: 0L
+            val messageCount = userSnapshot.getLong("groupMessageCount") ?: 0L
+            val checkinCount = userSnapshot.getLong("readingCheckinCount") ?: 0L
+
+            when (actionType) {
+                UserActionType.RATE_BOOK -> transaction.update(userRef, "ratedBooksCount", ratedCount + 1)
+                UserActionType.MARK_BOOK_AS_FINISHED -> transaction.update(userRef, "finishedBooksCount", finishedCount + 1)
+                UserActionType.SEND_GROUP_MESSAGE -> transaction.update(userRef, "groupMessageCount", messageCount + 1)
+                UserActionType.READING_CHECKIN -> transaction.update(userRef, "readingCheckinCount", checkinCount + 1)
+                else -> Unit
+            }
+        }.addOnSuccessListener {
+            unlockTitlesIfEligible(userId)
+            loadUserProfile(userId)
+        }
+    }
+
+    private fun unlockTitlesIfEligible(userId: String) {
+        val userRef = db.collection("users").document(userId)
+        userRef.get().addOnSuccessListener { snapshot ->
+            val finishedCount = snapshot.getLong("finishedBooksCount") ?: 0L
+            val ratedCount = snapshot.getLong("ratedBooksCount") ?: 0L
+            val messageCount = snapshot.getLong("groupMessageCount") ?: 0L
+            val checkinCount = snapshot.getLong("readingCheckinCount") ?: 0L
+
+            val eligibleTitles = mutableListOf<String>()
+            if (finishedCount >= 1) eligibleTitles.add("Leitor Iniciante")
+            if (ratedCount >= 5) eligibleTitles.add("Crítico Literário")
+            if (messageCount >= 20) eligibleTitles.add("Participante Ativo")
+            if (checkinCount >= 7) eligibleTitles.add("Leitor Constante")
+
+            eligibleTitles.forEach { titleName ->
+                val titleDoc = db.collection("users").document(userId).collection("titles").document(titleName)
+                titleDoc.get().addOnSuccessListener { existing ->
+                    if (!existing.exists()) {
+                        titleDoc.set(
+                            mapOf(
+                                "userId" to userId,
+                                "titleName" to titleName,
+                                "unlockedAt" to FieldValue.serverTimestamp(),
+                                "isEquipped" to false
+                            )
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    fun updateBookReadingStatus(book: ProfileRatedBook, status: ReadingStatus) {
+        val userId = auth.currentUser?.uid ?: return
+        if (book.id.isBlank()) return
+
+        val updates = mutableMapOf<String, Any>("readingStatus" to status.name)
+        if (status == ReadingStatus.FINISHED) {
+            updates["finishedAt"] = FieldValue.serverTimestamp()
+        }
+
+        db.collection("users").document(userId)
+            .collection("rated_books").document(book.id)
+            .update(updates)
+            .addOnSuccessListener {
+                val actionType = if (status == ReadingStatus.FINISHED) {
+                    UserActionType.MARK_BOOK_AS_FINISHED
+                } else {
+                    UserActionType.MARK_BOOK_AS_READING
+                }
+                registerUserAction(userId, actionType, mapOf("bookId" to book.googleBookId, "status" to status.name))
+                if (status == ReadingStatus.FINISHED) {
+                    grantXpAndProgress(userId, UserActionType.MARK_BOOK_AS_FINISHED)
+                }
+            }
+    }
+
     private fun fetchRatedBooks(userId: String) {
         val query = db.collection("users").document(userId).collection("rated_books")
             .orderBy("ratedAt", Query.Direction.DESCENDING)
@@ -375,7 +484,11 @@ class ProfileViewModel : ViewModel() {
         // ... (chamada ao Firestore add() - sem mudanças) ...
         db.collection("users").document(uid).collection("rated_books")
             .add(ratedBookData)
-            .addOnSuccessListener { Log.d("ProfileVM", "Livro avaliado salvo: ${book.volumeInfo?.title}") }
+            .addOnSuccessListener {
+                Log.d("ProfileVM", "Livro avaliado salvo: ${book.volumeInfo?.title}")
+                registerUserAction(uid, UserActionType.RATE_BOOK, mapOf("bookId" to book.id))
+                grantXpAndProgress(uid, UserActionType.RATE_BOOK)
+            }
             .addOnFailureListener { e -> Log.e("ProfileVM", "Erro ao salvar avaliação", e); _errorMessage.value = "Erro ao salvar avaliação." }
         _bookToRate.value = null
     }
