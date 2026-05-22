@@ -13,5 +13,6 @@ data class User(
     val favoriteAuthors: List<String> = emptyList(),
     val totalXp: Long = 0,
     val equippedTitle: String = "",
-    val currentStreak: Long = 0
+    val currentStreak: Long = 0,
+    val finishedBooksCount: Long = 0
 )
