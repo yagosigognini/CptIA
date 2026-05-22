@@ -40,12 +40,40 @@ class BookSearchViewModel : ViewModel() {
         viewModelScope.launch {
             _searchState.value = BookSearchState.Loading // Avisa a UI que está carregando
             try {
-                // Chama a função da nossa interface Retrofit
-                val response = apiService.searchBooks(query = query, apiKey = apiKey)
+                // Busca principal com filtros para melhorar precisão
+                val response = apiService.searchBooks(
+                    query = query,
+                    maxResults = 20,
+                    langRestrict = "pt",
+                    printType = "books",
+                    orderBy = "relevance",
+                    projection = "full",
+                    apiKey = apiKey
+                )
 
                 if (response.isSuccessful) {
                     // Sucesso: Pega a lista de livros (items) da resposta
-                    val books = response.body()?.items ?: emptyList()
+                    var books = response.body()?.items ?: emptyList()
+
+                    // Fallback sem filtros caso a busca filtrada não retorne nada
+                    if (books.isEmpty()) {
+                        Log.d("BookSearchVM", "Busca filtrada vazia para '$query'. Tentando fallback sem filtros.")
+                        val fallbackResponse = apiService.searchBooks(
+                            query = query,
+                            maxResults = 20,
+                            apiKey = apiKey
+                        )
+
+                        if (fallbackResponse.isSuccessful) {
+                            books = fallbackResponse.body()?.items ?: emptyList()
+                            Log.d("BookSearchVM", "Fallback retornou ${books.size} livros para '$query'.")
+                        } else {
+                            Log.w(
+                                "BookSearchVM",
+                                "Fallback falhou: ${fallbackResponse.code()} - ${fallbackResponse.message()}"
+                            )
+                        }
+                    }
 
                     // ⬇️ --- LOGS ADICIONADOS --- ⬇️
                     Log.d("BookSearchVM", "Recebidos ${books.size} livros para '$query'.")
