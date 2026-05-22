@@ -138,6 +138,7 @@ fun ProfileScreen(
             onSettingsClick = onSettingsClick,
             onClubClick = onClubClick,
             onAddBookClick = onAddBookClick,
+            onReadingCheckin = { viewModel.registerReadingCheckin() },
             onDeleteBookClick = { book -> viewModel.requestDeleteBook(book) },
             onSendFriendRequest = { viewModel.sendFriendRequest() },
             onFriendsListClick = onFriendsListClick,
@@ -161,6 +162,7 @@ fun ProfileScreenContent(
     onSettingsClick: () -> Unit,
     onClubClick: (BookClub) -> Unit,
     onAddBookClick: () -> Unit,
+    onReadingCheckin: () -> Unit,
     onDeleteBookClick: (ProfileRatedBook) -> Unit,
     onSendFriendRequest: () -> Unit,
     onFriendsListClick: () -> Unit,
@@ -222,6 +224,7 @@ fun ProfileScreenContent(
                         onSendFriendRequest = onSendFriendRequest,
                         onFriendsListClick = onFriendsListClick,
                         onRemoveFriendRequest = onRemoveFriendRequest,
+                        onReadingCheckin = onReadingCheckin,
                     )
                 }
                 // Item 2: A Estante
@@ -257,6 +260,7 @@ fun ProfileHeader(
     onSendFriendRequest: () -> Unit,
     onFriendsListClick: () -> Unit,
     onRemoveFriendRequest: () -> Unit,
+    onReadingCheckin: () -> Unit,
 ) {
     // Coluna principal centralizada
     Column(
@@ -299,6 +303,12 @@ fun ProfileHeader(
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
+        if (isOwnProfile) {
+            Spacer(modifier = Modifier.height(8.dp))
+            OutlinedButton(onClick = onReadingCheckin) {
+                Text("Registrar leitura de hoje")
+            }
+        }
         Spacer(modifier = Modifier.height(8.dp))
 
         // Sobre Mim
@@ -569,6 +579,7 @@ fun ProfileScreenPreview() {
             onSettingsClick = {},
             onClubClick = {},
             onAddBookClick = {},
+            onReadingCheckin = {},
             onDeleteBookClick = {},
             onSendFriendRequest = {},
             onFriendsListClick = {},
@@ -592,6 +603,7 @@ fun OtherProfileScreenNotFriendPreview() {
             onSettingsClick = {},
             onClubClick = {},
             onAddBookClick = {},
+            onReadingCheckin = {},
             onDeleteBookClick = {},
             onSendFriendRequest = {},
             onFriendsListClick = {},
@@ -615,6 +627,7 @@ fun OtherProfileScreenRequestSentPreview() {
             onSettingsClick = {},
             onClubClick = {},
             onAddBookClick = {},
+            onReadingCheckin = {},
             onDeleteBookClick = {},
             onSendFriendRequest = {},
             onFriendsListClick = {},

@@ -27,6 +27,8 @@ import com.google.firebase.ktx.Firebase
 import com.google.firebase.storage.ktx.storage
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import java.time.ZoneOffset
+import java.time.ZonedDateTime
 import java.util.Locale
 
 enum class UpdateStatus { IDLE, LOADING, SUCCESS, ERROR }
@@ -431,6 +433,59 @@ class ProfileViewModel : ViewModel() {
             }
     }
 
+    fun registerReadingCheckin(bookId: String? = null, pagesRead: Int? = null) {
+        val userId = auth.currentUser?.uid ?: return
+        val userRef = db.collection("users").document(userId)
+        val checkinsRef = db.collection("reading_checkins")
+        val now = ZonedDateTime.now(ZoneOffset.UTC)
+        val todayStart = now.toLocalDate().atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
+        val yesterdayStart = now.toLocalDate().minusDays(1).atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
+
+        db.runTransaction { transaction ->
+            val userSnapshot = transaction.get(userRef)
+            val currentStreak = userSnapshot.getLong("currentStreak") ?: 0L
+            val lastCheckinMillis = userSnapshot.getLong("lastCheckinEpochMillis")
+            val alreadyCheckedInToday = lastCheckinMillis != null && lastCheckinMillis >= todayStart
+
+            if (!alreadyCheckedInToday) {
+                val newStreak = when {
+                    lastCheckinMillis == null -> 1L
+                    lastCheckinMillis >= yesterdayStart -> currentStreak + 1
+                    else -> 1L
+                }
+
+                val doc = checkinsRef.document()
+                transaction.set(
+                    doc,
+                    mapOf(
+                        "userId" to userId,
+                        "bookId" to bookId,
+                        "pagesRead" to pagesRead,
+                        "createdAt" to FieldValue.serverTimestamp()
+                    )
+                )
+                transaction.update(
+                    userRef,
+                    mapOf(
+                        "currentStreak" to newStreak,
+                        "lastCheckinEpochMillis" to now.toInstant().toEpochMilli()
+                    )
+                )
+            }
+            alreadyCheckedInToday
+        }.addOnSuccessListener { alreadyCheckedInToday ->
+            if (alreadyCheckedInToday) {
+                _toastMessage.value = "Você já registrou sua leitura hoje."
+            } else {
+                registerUserAction(userId, UserActionType.READING_CHECKIN, mapOf("bookId" to bookId, "pagesRead" to pagesRead))
+                grantXpAndProgress(userId, UserActionType.READING_CHECKIN)
+                _toastMessage.value = "Leitura de hoje registrada!"
+            }
+        }.addOnFailureListener {
+            _errorMessage.value = "Não foi possível registrar check-in."
+        }
+    }
+
     private fun fetchRatedBooks(userId: String) {
         val query = db.collection("users").document(userId).collection("rated_books")
             .orderBy("ratedAt", Query.Direction.DESCENDING)
@@ -478,6 +533,7 @@ class ProfileViewModel : ViewModel() {
             "authors" to book.volumeInfo?.authors,
             "coverUrl" to book.volumeInfo?.imageLinks.getBestAvailableImageUrl(),
             "rating" to rating,
+            "readingStatus" to ReadingStatus.WANT_TO_READ.name,
             "ratedAt" to FieldValue.serverTimestamp()
         )
 
@@ -486,6 +542,7 @@ class ProfileViewModel : ViewModel() {
             .add(ratedBookData)
             .addOnSuccessListener {
                 Log.d("ProfileVM", "Livro avaliado salvo: ${book.volumeInfo?.title}")
+                registerUserAction(uid, UserActionType.ADD_BOOK_TO_SHELF, mapOf("bookId" to book.id))
                 registerUserAction(uid, UserActionType.RATE_BOOK, mapOf("bookId" to book.id))
                 grantXpAndProgress(uid, UserActionType.RATE_BOOK)
             }
