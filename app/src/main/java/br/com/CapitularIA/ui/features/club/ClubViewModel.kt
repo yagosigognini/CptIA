@@ -11,6 +11,7 @@ import br.com.CapitularIA.data.BookClub
 import br.com.CapitularIA.data.BookItem // ⬇️ NOVO: Modelo da API
 import br.com.CapitularIA.data.IndicatedBook // Mantemos para salvar
 import br.com.CapitularIA.data.Message
+import br.com.CapitularIA.data.UserActionType
 import br.com.CapitularIA.data.User
 import br.com.CapitularIA.data.getBestAvailableImageUrl // ⬇️ NOVO
 import br.com.CapitularIA.data.BookHistory
@@ -19,6 +20,7 @@ import br.com.CapitularIA.data.RecommendationRequest
 import br.com.CapitularIA.data.ValidatedRecommendation
 import br.com.CapitularIA.services.ClubBookRecommendationEngine
 import com.google.firebase.auth.ktx.auth
+import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.ListenerRegistration // ⬇️ NOVO
 import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.ktx.firestore
@@ -30,6 +32,9 @@ import java.util.concurrent.TimeUnit
 class ClubViewModel : ViewModel() {
 
     private val recommendationEngine = ClubBookRecommendationEngine()
+    private val xpByAction = mapOf(
+        UserActionType.SEND_GROUP_MESSAGE to 5L
+    )
 
     private val db = Firebase.firestore
     private val auth = Firebase.auth
@@ -291,7 +296,6 @@ class ClubViewModel : ViewModel() {
     }
 
     fun sendMessage(text: String, clubId: String) {
-        // (Sem mudanças necessárias aqui)
         if (text.isBlank()) return
         val currentUser = auth.currentUser ?: return
 
@@ -308,12 +312,53 @@ class ClubViewModel : ViewModel() {
                         senderPhotoUrl = user.profilePictureUrl,
                         type = "USER"
                     )
-                    db.collection("clubs").document(clubId).collection("messages").add(message).await()
+                    val messageRef = db.collection("clubs").document(clubId).collection("messages").add(message).await()
+                    rewardSendGroupMessageAction(
+                        userId = user.uid,
+                        clubId = clubId,
+                        messageId = messageRef.id
+                    )
                 } else {
                     Log.w("ClubViewModel", "Não foi possível buscar dados do usuário para enviar mensagem.")
                 }
             } catch (e: Exception) { Log.e("ClubViewModel", "Erro ao enviar mensagem", e) }
         }
+    }
+
+    private suspend fun rewardSendGroupMessageAction(
+        userId: String,
+        clubId: String,
+        messageId: String
+    ) {
+        val actionType = UserActionType.SEND_GROUP_MESSAGE
+        val gainedXp = xpByAction[actionType] ?: return
+        val userRef = db.collection("users").document(userId)
+        val actionRef = db.collection("user_actions")
+            .document("${actionType.name}_${userId}_${clubId}_${messageId}")
+
+        db.runTransaction { transaction ->
+            val actionSnapshot = transaction.get(actionRef)
+            if (actionSnapshot.exists()) {
+                return@runTransaction false
+            }
+
+            val userSnapshot = transaction.get(userRef)
+            val currentXp = userSnapshot.getLong("totalXp") ?: 0L
+            val messageCount = userSnapshot.getLong("groupMessageCount") ?: 0L
+
+            transaction.set(
+                actionRef,
+                mapOf(
+                    "userId" to userId,
+                    "actionType" to actionType.name,
+                    "metadata" to mapOf("clubId" to clubId, "messageId" to messageId),
+                    "createdAt" to FieldValue.serverTimestamp()
+                )
+            )
+            transaction.update(userRef, "totalXp", currentXp + gainedXp)
+            transaction.update(userRef, "groupMessageCount", messageCount + 1)
+            true
+        }.await()
     }
 
     private suspend fun postIndicationMessage(clubId: String, book: IndicatedBook, senderId: String) {
