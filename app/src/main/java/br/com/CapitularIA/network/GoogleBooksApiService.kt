@@ -17,6 +17,21 @@ interface GoogleBooksApiService {
         // Parâmetro 'maxResults': Quantos resultados queremos (ex: 10)
         @Query("maxResults") maxResults: Int = 10,
 
+        // Parâmetro 'langRestrict': Restringe resultados por idioma (ex: "pt")
+        @Query("langRestrict") langRestrict: String? = null,
+
+        // Parâmetro 'printType': Tipo de material (ex: "books", "magazines", "all")
+        @Query("printType") printType: String? = null,
+
+        // Parâmetro 'orderBy': Ordenação dos resultados (ex: "relevance", "newest")
+        @Query("orderBy") orderBy: String? = null,
+
+        // Parâmetro 'filter': Filtros de disponibilidade/tipo (ex: "ebooks", "free-ebooks")
+        @Query("filter") filter: String? = null,
+
+        // Parâmetro 'projection': Quantidade de dados retornados (ex: "full", "lite")
+        @Query("projection") projection: String? = null,
+
         // Parâmetro 'key': Sua chave de API do Google Cloud Console
         @Query("key") apiKey: String
     ): Response<GoogleBooksResponse> // Retorna a resposta completa, incluindo o objeto que definimos
