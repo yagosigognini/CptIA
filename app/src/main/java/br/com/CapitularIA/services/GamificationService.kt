@@ -82,20 +82,21 @@ class GamificationService(
             } else {
                 gainedXpBase
             }
+            val userProjectionUpdates = mutableMapOf<String, Any>()
             if (gainedXp > 0) {
                 // `totalXp` é uma projeção agregada derivada da trilha em `user_actions`.
                 // Atualizamos por incremento para leitura rápida em perfil/ranking.
-                transaction.update(userRef, "totalXp", currentXp + gainedXp)
+                userProjectionUpdates["totalXp"] = currentXp + gainedXp
             }
 
             when (actionType) {
                 // Estes contadores são projeções derivadas de `user_actions` e podem ser
                 // recomputados pela rotina administrativa de reconciliação.
-                UserActionType.RATE_BOOK -> transaction.update(userRef, "ratedBooksCount", ratedCount + 1)
-                UserActionType.MARK_BOOK_AS_FINISHED -> transaction.update(userRef, "finishedBooksCount", finishedCount + 1)
-                UserActionType.SEND_GROUP_MESSAGE -> transaction.update(userRef, "groupMessageCount", messageCount + 1)
+                UserActionType.RATE_BOOK -> userProjectionUpdates["ratedBooksCount"] = ratedCount + 1
+                UserActionType.MARK_BOOK_AS_FINISHED -> userProjectionUpdates["finishedBooksCount"] = finishedCount + 1
+                UserActionType.SEND_GROUP_MESSAGE -> userProjectionUpdates["groupMessageCount"] = messageCount + 1
                 UserActionType.READING_CHECKIN -> {
-                    transaction.update(userRef, "readingCheckinCount", checkinCount + 1)
+                    userProjectionUpdates["readingCheckinCount"] = checkinCount + 1
 
                     val today = LocalDate.now(ZoneOffset.UTC)
                     val lastCheckinEpochDay = userSnapshot.getLong("lastCheckinEpochDay")
@@ -108,15 +109,14 @@ class GamificationService(
                         else -> 1L
                     }
 
-                    transaction.update(
-                        userRef,
-                        mapOf(
-                            "currentStreak" to nextStreak,
-                            "lastCheckinEpochDay" to today.toEpochDay()
-                        )
-                    )
+                    userProjectionUpdates["currentStreak"] = nextStreak
+                    userProjectionUpdates["lastCheckinEpochDay"] = today.toEpochDay()
                 }
                 else -> Unit
+            }
+
+            if (userProjectionUpdates.isNotEmpty()) {
+                transaction.set(userRef, userProjectionUpdates, SetOptions.merge())
             }
 
             transaction.set(
