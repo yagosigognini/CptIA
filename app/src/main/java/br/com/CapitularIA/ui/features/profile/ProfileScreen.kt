@@ -281,6 +281,24 @@ fun ProfileHeader(
 
         // Nome
         Text(text = user.name, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        val level = (user.totalXp / 100) + 1
+        Text(
+            text = "Nível $level • XP ${user.totalXp}",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.primary
+        )
+        if (user.equippedTitle.isNotBlank()) {
+            Text(
+                text = user.equippedTitle,
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        Text(
+            text = "Streak atual: ${user.currentStreak}",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
         Spacer(modifier = Modifier.height(8.dp))
 
         // Sobre Mim
