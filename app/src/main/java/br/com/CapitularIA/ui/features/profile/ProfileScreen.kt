@@ -39,6 +39,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import br.com.CapitularIA.data.BookClub
 import br.com.CapitularIA.data.ProfileRatedBook
 import br.com.CapitularIA.data.User
+import br.com.CapitularIA.data.UserTitle
 import br.com.CapitularIA.data.sampleClubsList
 import br.com.CapitularIA.data.sampleRatedBooks
 import br.com.CapitularIA.data.sampleUser
@@ -77,6 +78,8 @@ fun ProfileScreen(
     val friendshipStatus by viewModel.friendshipStatus.observeAsState(FriendshipStatus.LOADING)
 
     val friendToRemove by viewModel.friendToRemove
+    val unlockedTitles by viewModel.unlockedTitles.observeAsState(emptyList())
+    val isLoadingTitles by viewModel.isLoadingTitles.observeAsState(false)
 
     val context = LocalContext.current
 
@@ -143,6 +146,8 @@ fun ProfileScreen(
             onSendFriendRequest = { viewModel.sendFriendRequest() },
             onFriendsListClick = onFriendsListClick,
             onRemoveFriendRequest = { viewModel.requestRemoveFriend() },
+            unlockedTitles = unlockedTitles,
+            isLoadingTitles = isLoadingTitles
         )
     }
 }
@@ -167,6 +172,8 @@ fun ProfileScreenContent(
     onSendFriendRequest: () -> Unit,
     onFriendsListClick: () -> Unit,
     onRemoveFriendRequest: () -> Unit,
+    unlockedTitles: List<UserTitle>,
+    isLoadingTitles: Boolean
 ) {
     AppBackground(backgroundResId = R.drawable.background) {
         Scaffold(
@@ -225,6 +232,8 @@ fun ProfileScreenContent(
                         onFriendsListClick = onFriendsListClick,
                         onRemoveFriendRequest = onRemoveFriendRequest,
                         onReadingCheckin = onReadingCheckin,
+                        unlockedTitles = unlockedTitles,
+                        isLoadingTitles = isLoadingTitles
                     )
                 }
                 // Item 2: A Estante
@@ -261,6 +270,8 @@ fun ProfileHeader(
     onFriendsListClick: () -> Unit,
     onRemoveFriendRequest: () -> Unit,
     onReadingCheckin: () -> Unit,
+    unlockedTitles: List<UserTitle>,
+    isLoadingTitles: Boolean
 ) {
     // Coluna principal centralizada
     Column(
@@ -286,23 +297,20 @@ fun ProfileHeader(
         // Nome
         Text(text = user.name, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
         val level = (user.totalXp / 100) + 1
-        Text(
-            text = "Nível $level • XP ${user.totalXp}",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.primary
-        )
-        if (user.equippedTitle.isNotBlank()) {
-            Text(
-                text = user.equippedTitle,
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+        val xpForCurrentLevel = (level - 1) * 100
+        val xpForNextLevel = level * 100
+        ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("Gamificação", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text("XP ${user.totalXp - xpForCurrentLevel} / ${xpForNextLevel - xpForCurrentLevel}")
+                Text("Nível $level • ${getFriendlyLevelName(level)}")
+                Text("Streak atual: ${user.currentStreak}")
+                Text("Livros lidos: ${user.finishedBooksCount}")
+                Text("Título equipado: ${user.equippedTitle.ifBlank { "Nenhum" }}")
+            }
         }
-        Text(
-            text = "Streak atual: ${user.currentStreak}",
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
+        Spacer(modifier = Modifier.height(10.dp))
+        UnlockedTitlesSection(unlockedTitles = unlockedTitles, isLoadingTitles = isLoadingTitles)
         if (isOwnProfile) {
             Spacer(modifier = Modifier.height(8.dp))
             OutlinedButton(onClick = onReadingCheckin) {
@@ -424,6 +432,29 @@ fun ProfileHeader(
 
         Spacer(modifier = Modifier.height(24.dp)) // Espaço final
     }
+}
+
+
+@Composable
+private fun UnlockedTitlesSection(unlockedTitles: List<UserTitle>, isLoadingTitles: Boolean) {
+    ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Títulos desbloqueados", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+            when {
+                isLoadingTitles -> CircularProgressIndicator(modifier = Modifier.size(20.dp))
+                unlockedTitles.isEmpty() -> Text("Nenhum título desbloqueado até agora.")
+                else -> unlockedTitles.take(5).forEach { Text("• ${it.titleName}") }
+            }
+        }
+    }
+}
+
+private fun getFriendlyLevelName(level: Long): String = when (level) {
+    1L -> "Leitor Iniciante"
+    in 2L..4L -> "Leitor Dedicado"
+    in 5L..9L -> "Explorador Literário"
+    in 10L..19L -> "Mestre das Páginas"
+    else -> "Lenda Literária"
 }
 
 // Seção da Estante (Checklist)
@@ -583,7 +614,9 @@ fun ProfileScreenPreview() {
             onDeleteBookClick = {},
             onSendFriendRequest = {},
             onFriendsListClick = {},
-            onRemoveFriendRequest = {}
+            onRemoveFriendRequest = {},
+            unlockedTitles = emptyList(),
+            isLoadingTitles = false
         )
     }
 }
@@ -607,7 +640,9 @@ fun OtherProfileScreenNotFriendPreview() {
             onDeleteBookClick = {},
             onSendFriendRequest = {},
             onFriendsListClick = {},
-            onRemoveFriendRequest = {}
+            onRemoveFriendRequest = {},
+            unlockedTitles = emptyList(),
+            isLoadingTitles = false
         )
     }
 }
@@ -631,7 +666,9 @@ fun OtherProfileScreenRequestSentPreview() {
             onDeleteBookClick = {},
             onSendFriendRequest = {},
             onFriendsListClick = {},
-            onRemoveFriendRequest = {}
+            onRemoveFriendRequest = {},
+            unlockedTitles = emptyList(),
+            isLoadingTitles = false
         )
     }
 }

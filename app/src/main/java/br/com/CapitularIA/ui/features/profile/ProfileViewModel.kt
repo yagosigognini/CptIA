@@ -16,6 +16,7 @@ import br.com.CapitularIA.data.ProfileRatedBook
 import br.com.CapitularIA.data.ReadingStatus
 import br.com.CapitularIA.data.UserActionType
 import br.com.CapitularIA.data.User
+import br.com.CapitularIA.data.UserTitle
 import br.com.CapitularIA.data.getBestAvailableImageUrl
 import br.com.CapitularIA.data.FriendRequest
 import com.google.firebase.auth.ktx.auth
@@ -78,6 +79,11 @@ class ProfileViewModel : ViewModel() {
     private val _friendshipStatus = MutableLiveData<FriendshipStatus>(FriendshipStatus.LOADING)
     val friendshipStatus: LiveData<FriendshipStatus> = _friendshipStatus
     // ⬆️ FIM DO NOVO LiveData
+    private val _unlockedTitles = MutableLiveData<List<UserTitle>>(emptyList())
+    val unlockedTitles: LiveData<List<UserTitle>> = _unlockedTitles
+
+    private val _isLoadingTitles = MutableLiveData<Boolean>(false)
+    val isLoadingTitles: LiveData<Boolean> = _isLoadingTitles
 
     private val _updateStatus = MutableLiveData<UpdateStatus>(UpdateStatus.IDLE)
     val updateStatus: LiveData<UpdateStatus> = _updateStatus
@@ -111,6 +117,8 @@ class ProfileViewModel : ViewModel() {
             _user.value = null
             _clubs.value = emptyList()
             _ratedBooks.value = emptyList()
+            _unlockedTitles.value = emptyList()
+            _isLoadingTitles.value = false
             _isOwnProfile.value = false
             clubsListener?.remove()
             ratedBooksListener?.remove()
@@ -122,6 +130,8 @@ class ProfileViewModel : ViewModel() {
         clubsListener?.remove()
         ratedBooksListener?.remove()
         friendStatusListener?.remove()
+        _isLoadingTitles.value = true
+        _unlockedTitles.value = emptyList()
 
         val isOwn = (idToFetch == currentUserId)
         _isOwnProfile.value = isOwn
@@ -143,18 +153,43 @@ class ProfileViewModel : ViewModel() {
                     if (userObject != null) {
                         fetchUserClubs(userObject.uid, currentUserId)
                         fetchRatedBooks(userObject.uid)
+                        fetchUnlockedTitles(userObject.uid)
                     } else {
                         Log.w("ProfileViewModel", "Falha ao converter documento do usuário. ID: $idToFetch")
                         _user.value = null; _clubs.value = emptyList(); _ratedBooks.value = emptyList()
+                        _unlockedTitles.value = emptyList()
+                        _isLoadingTitles.value = false
                     }
                 } else {
                     Log.w("ProfileViewModel", "Documento do usuário não encontrado. ID: $idToFetch")
                     _user.value = null; _clubs.value = emptyList(); _ratedBooks.value = emptyList()
+                    _unlockedTitles.value = emptyList()
+                    _isLoadingTitles.value = false
                 }
             }
             .addOnFailureListener { e ->
                 Log.e("ProfileViewModel", "Falha ao buscar usuário $idToFetch", e)
                 _user.value = null; _clubs.value = emptyList(); _ratedBooks.value = emptyList()
+                _unlockedTitles.value = emptyList()
+                _isLoadingTitles.value = false
+            }
+    }
+
+    private fun fetchUnlockedTitles(userId: String) {
+        _isLoadingTitles.value = true
+        db.collection("users")
+            .document(userId)
+            .collection("titles")
+            .orderBy("unlockedAt", Query.Direction.DESCENDING)
+            .get()
+            .addOnSuccessListener { snapshot ->
+                _unlockedTitles.value = snapshot.toObjects(UserTitle::class.java)
+                _isLoadingTitles.value = false
+            }
+            .addOnFailureListener { e ->
+                Log.e("ProfileVM", "Erro ao carregar títulos desbloqueados", e)
+                _unlockedTitles.value = emptyList()
+                _isLoadingTitles.value = false
             }
     }
 
