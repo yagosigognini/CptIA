@@ -1,9 +1,13 @@
 package br.com.CapitularIA.services
 
 import br.com.CapitularIA.data.UserActionType
+import com.google.firebase.Timestamp
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.tasks.await
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneOffset
 
 class GamificationService(
     private val db: FirebaseFirestore,
@@ -41,10 +45,14 @@ class GamificationService(
 
             val gainedXp = xpByAction[actionType] ?: 0L
             if (gainedXp > 0) {
+                // `totalXp` é uma projeção agregada derivada da trilha em `user_actions`.
+                // Atualizamos por incremento para leitura rápida em perfil/ranking.
                 transaction.update(userRef, "totalXp", currentXp + gainedXp)
             }
 
             when (actionType) {
+                // Estes contadores são projeções derivadas de `user_actions` e podem ser
+                // recomputados pela rotina administrativa de reconciliação.
                 UserActionType.RATE_BOOK -> transaction.update(userRef, "ratedBooksCount", ratedCount + 1)
                 UserActionType.MARK_BOOK_AS_FINISHED -> transaction.update(userRef, "finishedBooksCount", finishedCount + 1)
                 UserActionType.SEND_GROUP_MESSAGE -> transaction.update(userRef, "groupMessageCount", messageCount + 1)
@@ -69,6 +77,78 @@ class GamificationService(
         unlockTitlesIfEligible(userId)
         achievementService.evaluateAndPersist(userId, actionType)
         return true
+    }
+
+    /**
+     * Rotina administrativa para reconciliar as projeções do usuário a partir da trilha
+     * canônica de eventos em `user_actions`.
+     */
+    suspend fun recomputeUserProjection(userId: String) {
+        val userRef = db.collection("users").document(userId)
+        val actions = db.collection("user_actions")
+            .whereEqualTo("userId", userId)
+            .get()
+            .await()
+            .documents
+
+        var totalXp = 0L
+        var ratedCount = 0L
+        var finishedCount = 0L
+        var messageCount = 0L
+        var checkinCount = 0L
+        val checkinDates = mutableSetOf<LocalDate>()
+
+        actions.forEach { doc ->
+            val actionName = doc.getString("actionType") ?: return@forEach
+            val actionType = runCatching { UserActionType.valueOf(actionName) }.getOrNull() ?: return@forEach
+
+            totalXp += xpByAction[actionType] ?: 0L
+            when (actionType) {
+                UserActionType.RATE_BOOK -> ratedCount++
+                UserActionType.MARK_BOOK_AS_FINISHED -> finishedCount++
+                UserActionType.SEND_GROUP_MESSAGE -> messageCount++
+                UserActionType.READING_CHECKIN -> {
+                    checkinCount++
+                    val createdAt = doc.getTimestamp("createdAt")
+                    createdAt?.toLocalDateUtc()?.let { checkinDates.add(it) }
+                }
+                else -> Unit
+            }
+        }
+
+        userRef.update(
+            mapOf(
+                "totalXp" to totalXp,
+                "ratedBooksCount" to ratedCount,
+                "finishedBooksCount" to finishedCount,
+                "groupMessageCount" to messageCount,
+                "readingCheckinCount" to checkinCount,
+                "currentStreak" to calculateCurrentStreak(checkinDates)
+            )
+        ).await()
+    }
+
+    /** Reprocessa projeções agregadas de todos os usuários cadastrados. */
+    suspend fun recomputeAllUsersProjections() {
+        val users = db.collection("users").get().await().documents
+        users.forEach { userDoc ->
+            recomputeUserProjection(userDoc.id)
+        }
+    }
+
+    private fun Timestamp.toLocalDateUtc(): LocalDate =
+        Instant.ofEpochSecond(seconds, nanoseconds.toLong()).atZone(ZoneOffset.UTC).toLocalDate()
+
+    private fun calculateCurrentStreak(checkinDates: Set<LocalDate>): Long {
+        if (checkinDates.isEmpty()) return 0L
+        var streak = 0L
+        var cursor = LocalDate.now(ZoneOffset.UTC)
+
+        while (checkinDates.contains(cursor)) {
+            streak++
+            cursor = cursor.minusDays(1)
+        }
+        return streak
     }
 
     private suspend fun unlockTitlesIfEligible(userId: String) {
