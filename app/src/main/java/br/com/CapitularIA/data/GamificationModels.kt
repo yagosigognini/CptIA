@@ -44,3 +44,30 @@ data class ReadingCheckin(
     val pagesRead: Int? = null,
     @ServerTimestamp val createdAt: Timestamp? = null
 )
+
+enum class AchievementType {
+    BOOKS,
+    RATINGS,
+    SOCIAL,
+    CONSISTENCY
+}
+
+data class AchievementDefinition(
+    val id: String,
+    val name: String,
+    val description: String,
+    val criteria: String,
+    val icon: String,
+    val type: AchievementType,
+    val requiredProgress: Long
+)
+
+data class UserAchievement(
+    @DocumentId val id: String = "",
+    val userId: String = "",
+    val achievementId: String = "",
+    val progress: Long = 0,
+    val unlocked: Boolean = false,
+    @ServerTimestamp val unlockedAt: Timestamp? = null,
+    val updatedAtEpochMillis: Long = 0
+)

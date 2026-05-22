@@ -12,6 +12,7 @@ import br.com.CapitularIA.data.BookItem // ⬇️ NOVO: Modelo da API
 import br.com.CapitularIA.data.IndicatedBook // Mantemos para salvar
 import br.com.CapitularIA.data.Message
 import br.com.CapitularIA.data.UserActionType
+import br.com.CapitularIA.services.AchievementService
 import br.com.CapitularIA.data.User
 import br.com.CapitularIA.data.getBestAvailableImageUrl // ⬇️ NOVO
 import br.com.CapitularIA.data.BookHistory
@@ -32,6 +33,7 @@ import java.util.concurrent.TimeUnit
 class ClubViewModel : ViewModel() {
 
     private val recommendationEngine = ClubBookRecommendationEngine()
+    private val achievementService = AchievementService(db)
     private val xpByAction = mapOf(
         UserActionType.SEND_GROUP_MESSAGE to 5L
     )
@@ -359,6 +361,7 @@ class ClubViewModel : ViewModel() {
             transaction.update(userRef, "groupMessageCount", messageCount + 1)
             true
         }.await()
+        achievementService.evaluateAndPersist(userId, actionType)
     }
 
     private suspend fun postIndicationMessage(clubId: String, book: IndicatedBook, senderId: String) {
