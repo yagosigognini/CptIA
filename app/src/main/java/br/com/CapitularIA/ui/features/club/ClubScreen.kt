@@ -118,6 +118,7 @@ fun ClubScreen(
     val bookPendingIndication by viewModel.bookPendingIndication // Observa o livro pendente vindo da busca
     val recommendations by viewModel.recommendations.observeAsState(emptyList())
     val isLoadingRecommendations by viewModel.isLoadingRecommendations.observeAsState(false)
+    val currentUserGamification by viewModel.currentUserGamification.observeAsState()
 
     var inputText by remember { mutableStateOf("") } // Estado local para o campo de mensagem
     var isQuickMenuExpanded by rememberSaveable { mutableStateOf(false) }
@@ -171,6 +172,7 @@ fun ClubScreen(
             isLoadingRecommendations = isLoadingRecommendations,
             recommendationInput = recommendationInput,
             onRecommendationInputChange = { recommendationInput = it },
+            currentUserGamification = currentUserGamification,
             onRequestRecommendations = {
                 val chatContext = messages
                     .asReversed()
@@ -655,13 +657,14 @@ private fun QuickActionDialog(
     isLoadingRecommendations: Boolean,
     recommendationInput: String,
     onRecommendationInputChange: (String) -> Unit,
+    currentUserGamification: User?,
     onRequestRecommendations: () -> Unit,
     onDismiss: () -> Unit
 ) {
     val (title, message) = when (action) {
         QuickAction.Recommendation -> "Pedir recomendação" to ""
         QuickAction.History -> "Histórico do clube" to formatHistory(club)
-        QuickAction.Gamification -> "Gamificação" to "Conquistas como Leitor da Madrugada e Fominha aparecem aqui conforme participação no chat e leitura."
+        QuickAction.Gamification -> "Gamificação" to ""
     }
 
     AlertDialog(
@@ -702,6 +705,18 @@ private fun QuickActionDialog(
                             }
                         }
                     }
+                }
+            } else if (action == QuickAction.Gamification) {
+                val user = currentUserGamification
+                val level = ((user?.totalXp ?: 0L) / 100L) + 1L
+                val xpProgress = (user?.totalXp ?: 0L) % 100L
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Nível $level")
+                    Text("XP: $xpProgress / 100")
+                    Text("Título equipado: ${user?.equippedTitle?.ifBlank { "Nenhum" } ?: "Nenhum"}")
+                    Text("Streak atual: ${user?.currentStreak ?: 0}")
+                    Text("Livros concluídos: ${user?.finishedBooksCount ?: 0}")
+                    Text("Ações no clube e leitura diária geram progresso de conquistas.")
                 }
             } else {
                 Text(message)

@@ -40,6 +40,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import br.com.CapitularIA.data.BookClub
 import br.com.CapitularIA.data.ProfileRatedBook
+import br.com.CapitularIA.data.ReadingStatus
 import br.com.CapitularIA.data.User
 import br.com.CapitularIA.data.UserTitle
 import br.com.CapitularIA.data.UserAchievement
@@ -150,6 +151,7 @@ fun ProfileScreen(
             onAddBookClick = onAddBookClick,
             onReadingCheckin = { showReadingCheckinDialog = true },
             onDeleteBookClick = { book -> viewModel.requestDeleteBook(book) },
+            onUpdateReadingStatus = { book, status -> viewModel.updateBookReadingStatus(book, status) },
             onSendFriendRequest = { viewModel.sendFriendRequest() },
             onFriendsListClick = onFriendsListClick,
             onRemoveFriendRequest = { viewModel.requestRemoveFriend() },
@@ -167,6 +169,10 @@ fun ProfileScreen(
             onDismiss = { showChooseTitleDialog = false },
             onEquipTitle = { selectedTitle ->
                 viewModel.equipTitle(selectedTitle)
+                showChooseTitleDialog = false
+            },
+            onUnequipTitle = {
+                viewModel.unequipTitle()
                 showChooseTitleDialog = false
             }
         )
@@ -201,6 +207,7 @@ fun ProfileScreenContent(
     onAddBookClick: () -> Unit,
     onReadingCheckin: () -> Unit,
     onDeleteBookClick: (ProfileRatedBook) -> Unit,
+    onUpdateReadingStatus: (ProfileRatedBook, ReadingStatus) -> Unit,
     onSendFriendRequest: () -> Unit,
     onFriendsListClick: () -> Unit,
     onRemoveFriendRequest: () -> Unit,
@@ -273,14 +280,12 @@ fun ProfileScreenContent(
                 }
                 // Item 2: A Estante
                 item {
-                    AchievementsSection(achievements = achievements)
-                }
-                item {
                     ChecklistSection(
                         ratedBooks = ratedBooks,
                         onAddBookClick = onAddBookClick,
                         isOwnProfile = isOwnProfile,
-                        onDeleteBookClick = onDeleteBookClick
+                        onDeleteBookClick = onDeleteBookClick,
+                        onUpdateReadingStatus = onUpdateReadingStatus
                     )
                 }
                 // Item 3: Os Clubes
@@ -349,7 +354,6 @@ fun ProfileHeader(
             }
         }
         Spacer(modifier = Modifier.height(10.dp))
-        UnlockedTitlesSection(unlockedTitles = unlockedTitles, isLoadingTitles = isLoadingTitles)
         if (isOwnProfile) {
             Spacer(modifier = Modifier.height(8.dp))
             OutlinedButton(onClick = onReadingCheckin) {
@@ -501,7 +505,8 @@ private fun ChooseTitleDialog(
     unlockedTitles: List<UserTitle>,
     currentEquippedTitle: String,
     onDismiss: () -> Unit,
-    onEquipTitle: (UserTitle) -> Unit
+    onEquipTitle: (UserTitle) -> Unit,
+    onUnequipTitle: () -> Unit
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -514,7 +519,11 @@ private fun ChooseTitleDialog(
             if (unlockedTitles.isEmpty()) {
                 Text("Você ainda não desbloqueou títulos.")
             } else {
-                LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(onClick = onUnequipTitle, modifier = Modifier.fillMaxWidth()) {
+                        Text("Não usar título")
+                    }
+                    LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(unlockedTitles.size) { index ->
                         val title = unlockedTitles[index]
                         val isEquipped = title.isEquipped || title.titleName == currentEquippedTitle
@@ -549,6 +558,7 @@ private fun ChooseTitleDialog(
                             }
                         }
                     }
+                }
                 }
             }
         }
@@ -672,7 +682,8 @@ fun ChecklistSection(
     ratedBooks: List<ProfileRatedBook>,
     onAddBookClick: () -> Unit,
     isOwnProfile: Boolean,
-    onDeleteBookClick: (ProfileRatedBook) -> Unit
+    onDeleteBookClick: (ProfileRatedBook) -> Unit,
+    onUpdateReadingStatus: (ProfileRatedBook, ReadingStatus) -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -729,6 +740,7 @@ fun ChecklistSection(
                     RatedBookItem(
                         book = book,
                         onDeleteClick = { onDeleteBookClick(book) },
+                        onUpdateReadingStatus = { status -> onUpdateReadingStatus(book, status) },
                         isOwnProfile = isOwnProfile
                     )
                 }
@@ -744,6 +756,7 @@ fun ChecklistSection(
 fun RatedBookItem(
     book: ProfileRatedBook,
     onDeleteClick: () -> Unit,
+    onUpdateReadingStatus: (ReadingStatus) -> Unit,
     isOwnProfile: Boolean, // ✅ CORREÇÃO: Parâmetro adicionado
     modifier: Modifier = Modifier
 ) {
@@ -797,6 +810,25 @@ fun RatedBookItem(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
+            if (isOwnProfile) {
+                var expanded by remember { mutableStateOf(false) }
+                Box(modifier = Modifier.padding(bottom = 6.dp)) {
+                    TextButton(onClick = { expanded = true }) {
+                        Text("Status: ${ReadingStatus.valueOf(book.readingStatus).label}", fontSize = 11.sp)
+                    }
+                    DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                        ReadingStatus.entries.forEach { status ->
+                            DropdownMenuItem(
+                                text = { Text(status.label) },
+                                onClick = {
+                                    expanded = false
+                                    onUpdateReadingStatus(status)
+                                }
+                            )
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -821,6 +853,7 @@ fun ProfileScreenPreview() {
             onAddBookClick = {},
             onReadingCheckin = {},
             onDeleteBookClick = {},
+            onUpdateReadingStatus = { _, _ -> },
             onSendFriendRequest = {},
             onFriendsListClick = {},
             onRemoveFriendRequest = {},
@@ -849,6 +882,7 @@ fun OtherProfileScreenNotFriendPreview() {
             onAddBookClick = {},
             onReadingCheckin = {},
             onDeleteBookClick = {},
+            onUpdateReadingStatus = { _, _ -> },
             onSendFriendRequest = {},
             onFriendsListClick = {},
             onRemoveFriendRequest = {},
@@ -877,6 +911,7 @@ fun OtherProfileScreenRequestSentPreview() {
             onAddBookClick = {},
             onReadingCheckin = {},
             onDeleteBookClick = {},
+            onUpdateReadingStatus = { _, _ -> },
             onSendFriendRequest = {},
             onFriendsListClick = {},
             onRemoveFriendRequest = {},
@@ -899,6 +934,7 @@ fun RatedBookItemPreview() {
                 rating = 4.5f
             ),
             onDeleteClick = {},
+            onUpdateReadingStatus = {},
             isOwnProfile = true // ✅ CORREÇÃO: Adicionado ao Preview
         )
     }
@@ -915,6 +951,7 @@ fun RatedBookItemOtherProfilePreview() {
                 rating = 4.5f
             ),
             onDeleteClick = {},
+            onUpdateReadingStatus = {},
             isOwnProfile = false // ✅ CORREÇÃO: Testando sem permissão de delete
         )
     }
