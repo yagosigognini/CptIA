@@ -335,7 +335,7 @@ class ProfileViewModel : ViewModel() {
     private fun registerUserAction(
         userId: String,
         actionType: UserActionType,
-        metadata: Map<String, Any> = emptyMap()
+        metadata: Map<String, Any?> = emptyMap()
     ) {
         val actionPayload = mapOf(
             "userId" to userId,
