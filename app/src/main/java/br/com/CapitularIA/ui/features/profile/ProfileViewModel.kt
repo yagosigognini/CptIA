@@ -17,8 +17,10 @@ import br.com.CapitularIA.data.ReadingStatus
 import br.com.CapitularIA.data.UserActionType
 import br.com.CapitularIA.data.User
 import br.com.CapitularIA.data.UserTitle
+import br.com.CapitularIA.data.UserAchievement
 import br.com.CapitularIA.data.getBestAvailableImageUrl
 import br.com.CapitularIA.data.FriendRequest
+import br.com.CapitularIA.services.AchievementService
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.ListenerRegistration
@@ -48,7 +50,7 @@ class ProfileViewModel : ViewModel() {
     private val db = Firebase.firestore
     private val auth = Firebase.auth
     private val storage = Firebase.storage
-
+    private val achievementService = AchievementService(db)
 
     private val xpByAction = mapOf(
         UserActionType.RATE_BOOK to 10L,
@@ -84,6 +86,9 @@ class ProfileViewModel : ViewModel() {
 
     private val _isLoadingTitles = MutableLiveData<Boolean>(false)
     val isLoadingTitles: LiveData<Boolean> = _isLoadingTitles
+
+    private val _achievements = MutableLiveData<List<UserAchievement>>(emptyList())
+    val achievements: LiveData<List<UserAchievement>> = _achievements
 
     private val _updateStatus = MutableLiveData<UpdateStatus>(UpdateStatus.IDLE)
     val updateStatus: LiveData<UpdateStatus> = _updateStatus
@@ -154,16 +159,19 @@ class ProfileViewModel : ViewModel() {
                         fetchUserClubs(userObject.uid, currentUserId)
                         fetchRatedBooks(userObject.uid)
                         fetchUnlockedTitles(userObject.uid)
+                        fetchUserAchievements(userObject.uid)
                     } else {
                         Log.w("ProfileViewModel", "Falha ao converter documento do usuário. ID: $idToFetch")
                         _user.value = null; _clubs.value = emptyList(); _ratedBooks.value = emptyList()
                         _unlockedTitles.value = emptyList()
+                        _achievements.value = emptyList()
                         _isLoadingTitles.value = false
                     }
                 } else {
                     Log.w("ProfileViewModel", "Documento do usuário não encontrado. ID: $idToFetch")
                     _user.value = null; _clubs.value = emptyList(); _ratedBooks.value = emptyList()
                     _unlockedTitles.value = emptyList()
+                    _achievements.value = emptyList()
                     _isLoadingTitles.value = false
                 }
             }
@@ -190,6 +198,18 @@ class ProfileViewModel : ViewModel() {
                 Log.e("ProfileVM", "Erro ao carregar títulos desbloqueados", e)
                 _unlockedTitles.value = emptyList()
                 _isLoadingTitles.value = false
+            }
+    }
+
+
+    private fun fetchUserAchievements(userId: String) {
+        db.collection("users").document(userId).collection("achievements")
+            .get()
+            .addOnSuccessListener { snapshot ->
+                _achievements.value = snapshot.toObjects(UserAchievement::class.java)
+            }
+            .addOnFailureListener {
+                _achievements.value = emptyList()
             }
     }
 
@@ -407,6 +427,7 @@ class ProfileViewModel : ViewModel() {
             }
         }.addOnSuccessListener {
             unlockTitlesIfEligible(userId)
+            viewModelScope.launch { achievementService.evaluateAndPersist(userId, actionType) }
             loadUserProfile(userId)
         }
     }

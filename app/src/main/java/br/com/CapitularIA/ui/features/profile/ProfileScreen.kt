@@ -42,6 +42,8 @@ import br.com.CapitularIA.data.BookClub
 import br.com.CapitularIA.data.ProfileRatedBook
 import br.com.CapitularIA.data.User
 import br.com.CapitularIA.data.UserTitle
+import br.com.CapitularIA.data.UserAchievement
+import br.com.CapitularIA.services.AchievementCatalog
 import br.com.CapitularIA.data.sampleClubsList
 import br.com.CapitularIA.data.sampleRatedBooks
 import br.com.CapitularIA.data.sampleUser
@@ -84,6 +86,7 @@ fun ProfileScreen(
     val friendToRemove by viewModel.friendToRemove
     val unlockedTitles by viewModel.unlockedTitles.observeAsState(emptyList())
     val isLoadingTitles by viewModel.isLoadingTitles.observeAsState(false)
+    val achievements by viewModel.achievements.observeAsState(emptyList())
 
     val context = LocalContext.current
 
@@ -152,7 +155,8 @@ fun ProfileScreen(
             onRemoveFriendRequest = { viewModel.requestRemoveFriend() },
             unlockedTitles = unlockedTitles,
             isLoadingTitles = isLoadingTitles,
-            onChooseTitleClick = { showChooseTitleDialog = true }
+            onChooseTitleClick = { showChooseTitleDialog = true },
+            achievements = achievements
         )
     }
 
@@ -267,6 +271,9 @@ fun ProfileScreenContent(
                     )
                 }
                 // Item 2: A Estante
+                item {
+                    AchievementsSection(achievements = achievements)
+                }
                 item {
                     ChecklistSection(
                         ratedBooks = ratedBooks,
@@ -906,5 +913,28 @@ fun RatedBookItemOtherProfilePreview() {
             onDeleteClick = {},
             isOwnProfile = false // ✅ CORREÇÃO: Testando sem permissão de delete
         )
+    }
+}
+
+@Composable
+private fun AchievementsSection(achievements: List<UserAchievement>) {
+    val byId = achievements.associateBy { it.achievementId }
+    val catalog = AchievementCatalog.initial
+
+    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
+        Text("Conquistas", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(8.dp))
+        catalog.forEach { item ->
+            val progress = byId[item.id]?.progress ?: 0L
+            val unlocked = byId[item.id]?.unlocked ?: false
+            Card(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                Column(Modifier.padding(12.dp)) {
+                    Text("${item.icon} ${item.name}", fontWeight = FontWeight.SemiBold)
+                    Text(item.description, style = MaterialTheme.typography.bodySmall)
+                    Text("Critério: ${item.criteria}", style = MaterialTheme.typography.bodySmall)
+                    Text(if (unlocked) "Status: Desbloqueada" else "Status: Em progresso (${progress}/${item.requiredProgress})", style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        }
     }
 }
