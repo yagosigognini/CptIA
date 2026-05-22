@@ -9,7 +9,9 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send // Ícone para Pedido Enviado
@@ -293,7 +295,8 @@ fun ProfileScreenContent(
                         onReadingCheckin = onReadingCheckin,
                         unlockedTitles = unlockedTitles,
                         isLoadingTitles = isLoadingTitles,
-                        onChooseTitleClick = onChooseTitleClick
+                        onChooseTitleClick = onChooseTitleClick,
+                        onOpenAchievements = onOpenAchievements
                     )
                 }
                 // Item 2: A Estante
@@ -333,7 +336,8 @@ fun ProfileHeader(
     onReadingCheckin: () -> Unit,
     unlockedTitles: List<UserTitle>,
     isLoadingTitles: Boolean,
-    onChooseTitleClick: () -> Unit
+    onChooseTitleClick: () -> Unit,
+    onOpenAchievements: () -> Unit
 ) {
     // Coluna principal centralizada
     Column(
