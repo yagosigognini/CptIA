@@ -206,7 +206,8 @@ fun ProfileScreenContent(
     onRemoveFriendRequest: () -> Unit,
     unlockedTitles: List<UserTitle>,
     isLoadingTitles: Boolean,
-    onChooseTitleClick: () -> Unit
+    onChooseTitleClick: () -> Unit,
+    achievements: List<UserAchievement>
 ) {
     AppBackground(backgroundResId = R.drawable.background) {
         Scaffold(
@@ -611,7 +612,7 @@ private fun ReadingCheckinDialog(
                         )
                         ratedBooks.forEach { book ->
                             DropdownMenuItem(
-                                text = { Text(book.title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                                text = { Text(book.title ?: "Sem Título", maxLines = 1, overflow = TextOverflow.Ellipsis) },
                                 onClick = {
                                     selectedBookId = book.googleBookId.ifBlank { null }
                                     isBookSelectorExpanded = false
@@ -825,7 +826,8 @@ fun ProfileScreenPreview() {
             onRemoveFriendRequest = {},
             unlockedTitles = emptyList(),
             isLoadingTitles = false,
-            onChooseTitleClick = {}
+            onChooseTitleClick = {},
+            achievements = emptyList()
         )
     }
 }
@@ -852,7 +854,8 @@ fun OtherProfileScreenNotFriendPreview() {
             onRemoveFriendRequest = {},
             unlockedTitles = emptyList(),
             isLoadingTitles = false,
-            onChooseTitleClick = {}
+            onChooseTitleClick = {},
+            achievements = emptyList()
         )
     }
 }
@@ -879,7 +882,8 @@ fun OtherProfileScreenRequestSentPreview() {
             onRemoveFriendRequest = {},
             unlockedTitles = emptyList(),
             isLoadingTitles = false,
-            onChooseTitleClick = {}
+            onChooseTitleClick = {},
+            achievements = emptyList()
         )
     }
 }

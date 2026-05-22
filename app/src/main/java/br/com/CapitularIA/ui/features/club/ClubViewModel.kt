@@ -31,11 +31,11 @@ import java.util.concurrent.TimeUnit
 
 class ClubViewModel : ViewModel() {
 
+    private val db = Firebase.firestore
+    private val auth = Firebase.auth
     private val recommendationEngine = ClubBookRecommendationEngine()
     private val gamificationService = GamificationService(db)
 
-    private val db = Firebase.firestore
-    private val auth = Firebase.auth
     private var currentClubId: String? = null // ⬇️ NOVO: Guarda o ID do clube atual
 
     // ⬇️ NOVO: Listeners para limpar depois
