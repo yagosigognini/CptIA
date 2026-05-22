@@ -468,6 +468,51 @@ class ProfileViewModel : ViewModel() {
             }
     }
 
+    fun equipTitle(title: UserTitle) {
+        val userId = auth.currentUser?.uid
+        if (userId.isNullOrBlank()) {
+            _errorMessage.value = "Usuário não autenticado."
+            return
+        }
+        if (_isOwnProfile.value != true) {
+            _errorMessage.value = "Você só pode equipar títulos no próprio perfil."
+            return
+        }
+
+        viewModelScope.launch {
+            try {
+                val userRef = db.collection("users").document(userId)
+                val titlesRef = userRef.collection("titles")
+                val selectedTitleRef = titlesRef.document(title.id)
+
+                val selectedSnapshot = selectedTitleRef.get().await()
+                if (!selectedSnapshot.exists()) {
+                    _errorMessage.value = "Título não encontrado entre os desbloqueados."
+                    return@launch
+                }
+
+                val allTitlesSnapshot = titlesRef.get().await()
+                val batch = db.batch()
+
+                allTitlesSnapshot.documents.forEach { doc ->
+                    batch.update(doc.reference, "isEquipped", false)
+                }
+                batch.update(selectedTitleRef, "isEquipped", true)
+                batch.update(userRef, "equippedTitle", title.titleName)
+                batch.commit().await()
+
+                _user.value = _user.value?.copy(equippedTitle = title.titleName)
+                _unlockedTitles.value = allTitlesSnapshot.toObjects(UserTitle::class.java).map {
+                    if (it.id == title.id) it.copy(isEquipped = true) else it.copy(isEquipped = false)
+                }
+                _toastMessage.value = "Título \"${title.titleName}\" equipado!"
+            } catch (e: Exception) {
+                Log.e("ProfileVM", "Erro ao equipar título ${title.id}", e)
+                _errorMessage.value = "Não foi possível equipar o título."
+            }
+        }
+    }
+
     fun registerReadingCheckin(bookId: String? = null, pagesRead: Int? = null) {
         val userId = auth.currentUser?.uid ?: return
         val userRef = db.collection("users").document(userId)

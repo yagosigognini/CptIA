@@ -19,6 +19,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.livedata.observeAsState
@@ -64,6 +65,7 @@ fun ProfileScreen(
     onFriendsListClick: () -> Unit,
 ) {
     LaunchedEffect(key1 = userId) { viewModel.loadUserProfile(userId) }
+    var showChooseTitleDialog by remember { mutableStateOf(false) }
 
     // Observa os estados do ViewModel
     val user by viewModel.user.observeAsState()
@@ -147,7 +149,20 @@ fun ProfileScreen(
             onFriendsListClick = onFriendsListClick,
             onRemoveFriendRequest = { viewModel.requestRemoveFriend() },
             unlockedTitles = unlockedTitles,
-            isLoadingTitles = isLoadingTitles
+            isLoadingTitles = isLoadingTitles,
+            onChooseTitleClick = { showChooseTitleDialog = true }
+        )
+    }
+
+    if (showChooseTitleDialog && isOwnProfile) {
+        ChooseTitleDialog(
+            unlockedTitles = unlockedTitles,
+            currentEquippedTitle = user?.equippedTitle.orEmpty(),
+            onDismiss = { showChooseTitleDialog = false },
+            onEquipTitle = { selectedTitle ->
+                viewModel.equipTitle(selectedTitle)
+                showChooseTitleDialog = false
+            }
         )
     }
 }
@@ -173,7 +188,8 @@ fun ProfileScreenContent(
     onFriendsListClick: () -> Unit,
     onRemoveFriendRequest: () -> Unit,
     unlockedTitles: List<UserTitle>,
-    isLoadingTitles: Boolean
+    isLoadingTitles: Boolean,
+    onChooseTitleClick: () -> Unit
 ) {
     AppBackground(backgroundResId = R.drawable.background) {
         Scaffold(
@@ -233,7 +249,8 @@ fun ProfileScreenContent(
                         onRemoveFriendRequest = onRemoveFriendRequest,
                         onReadingCheckin = onReadingCheckin,
                         unlockedTitles = unlockedTitles,
-                        isLoadingTitles = isLoadingTitles
+                        isLoadingTitles = isLoadingTitles,
+                        onChooseTitleClick = onChooseTitleClick
                     )
                 }
                 // Item 2: A Estante
@@ -271,7 +288,8 @@ fun ProfileHeader(
     onRemoveFriendRequest: () -> Unit,
     onReadingCheckin: () -> Unit,
     unlockedTitles: List<UserTitle>,
-    isLoadingTitles: Boolean
+    isLoadingTitles: Boolean,
+    onChooseTitleClick: () -> Unit
 ) {
     // Coluna principal centralizada
     Column(
@@ -315,6 +333,12 @@ fun ProfileHeader(
             Spacer(modifier = Modifier.height(8.dp))
             OutlinedButton(onClick = onReadingCheckin) {
                 Text("Registrar leitura de hoje")
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            Button(onClick = onChooseTitleClick) {
+                Icon(Icons.Default.EmojiEvents, contentDescription = null)
+                Spacer(Modifier.size(ButtonDefaults.IconSpacing))
+                Text("Escolher título")
             }
         }
         Spacer(modifier = Modifier.height(8.dp))
@@ -443,10 +467,71 @@ private fun UnlockedTitlesSection(unlockedTitles: List<UserTitle>, isLoadingTitl
             when {
                 isLoadingTitles -> CircularProgressIndicator(modifier = Modifier.size(20.dp))
                 unlockedTitles.isEmpty() -> Text("Nenhum título desbloqueado até agora.")
-                else -> unlockedTitles.take(5).forEach { Text("• ${it.titleName}") }
+                else -> unlockedTitles.take(5).forEach { title ->
+                    Text("• ${title.titleName}${if (title.isEquipped) " (equipado)" else ""}")
+                }
             }
         }
     }
+}
+
+@Composable
+private fun ChooseTitleDialog(
+    unlockedTitles: List<UserTitle>,
+    currentEquippedTitle: String,
+    onDismiss: () -> Unit,
+    onEquipTitle: (UserTitle) -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {},
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Fechar") }
+        },
+        title = { Text("Escolher título") },
+        text = {
+            if (unlockedTitles.isEmpty()) {
+                Text("Você ainda não desbloqueou títulos.")
+            } else {
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(unlockedTitles.size) { index ->
+                        val title = unlockedTitles[index]
+                        val isEquipped = title.isEquipped || title.titleName == currentEquippedTitle
+                        OutlinedCard(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onEquipTitle(title) },
+                            colors = CardDefaults.outlinedCardColors(
+                                containerColor = if (isEquipped) {
+                                    MaterialTheme.colorScheme.primaryContainer
+                                } else {
+                                    MaterialTheme.colorScheme.surface
+                                }
+                            )
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(12.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(title.titleName, fontWeight = if (isEquipped) FontWeight.Bold else FontWeight.Normal)
+                                if (isEquipped) {
+                                    AssistChip(
+                                        onClick = { },
+                                        label = { Text("Equipado") }
+                                    )
+                                } else {
+                                    TextButton(onClick = { onEquipTitle(title) }) { Text("Equipar") }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    )
 }
 
 private fun getFriendlyLevelName(level: Long): String = when (level) {
@@ -616,7 +701,8 @@ fun ProfileScreenPreview() {
             onFriendsListClick = {},
             onRemoveFriendRequest = {},
             unlockedTitles = emptyList(),
-            isLoadingTitles = false
+            isLoadingTitles = false,
+            onChooseTitleClick = {}
         )
     }
 }
@@ -642,7 +728,8 @@ fun OtherProfileScreenNotFriendPreview() {
             onFriendsListClick = {},
             onRemoveFriendRequest = {},
             unlockedTitles = emptyList(),
-            isLoadingTitles = false
+            isLoadingTitles = false,
+            onChooseTitleClick = {}
         )
     }
 }
@@ -668,7 +755,8 @@ fun OtherProfileScreenRequestSentPreview() {
             onFriendsListClick = {},
             onRemoveFriendRequest = {},
             unlockedTitles = emptyList(),
-            isLoadingTitles = false
+            isLoadingTitles = false,
+            onChooseTitleClick = {}
         )
     }
 }
