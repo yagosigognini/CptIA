@@ -394,6 +394,16 @@ class ClubViewModel : ViewModel() {
 
                 _recommendations.value = result
                 updateRecommendationHistory(result.map { it.recommendation.title })
+                auth.currentUser?.uid?.let { userId ->
+                    val actionType = UserActionType.USE_AI_RECOMMENDATION
+                    val actionId = "${actionType.name}_${userId}_${System.currentTimeMillis()}"
+                    gamificationService.processAction(
+                        userId = userId,
+                        actionType = actionType,
+                        metadata = mapOf("clubId" to club.id, "prompt" to prompt, "resultCount" to result.size),
+                        idempotencyKey = actionId
+                    )
+                }
                 if (result.isEmpty()) _toastMessage.value = "Nenhuma recomendação válida encontrada."
             } catch (e: Exception) {
                 Log.e("ClubViewModel", "Erro ao gerar recomendações", e)

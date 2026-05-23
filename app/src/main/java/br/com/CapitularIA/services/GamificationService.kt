@@ -25,7 +25,8 @@ class GamificationService(
         UserActionType.RATE_BOOK to 10L,
         UserActionType.MARK_BOOK_AS_FINISHED to 50L,
         UserActionType.SEND_GROUP_MESSAGE to 5L,
-        UserActionType.READING_CHECKIN to 20L
+        UserActionType.READING_CHECKIN to 20L,
+        UserActionType.USE_AI_RECOMMENDATION to 15L
     )
 
     suspend fun processAction(
@@ -95,6 +96,10 @@ class GamificationService(
                 UserActionType.RATE_BOOK -> userProjectionUpdates["ratedBooksCount"] = ratedCount + 1
                 UserActionType.MARK_BOOK_AS_FINISHED -> userProjectionUpdates["finishedBooksCount"] = finishedCount + 1
                 UserActionType.SEND_GROUP_MESSAGE -> userProjectionUpdates["groupMessageCount"] = messageCount + 1
+                UserActionType.USE_AI_RECOMMENDATION -> {
+                    val aiUsageCount = userSnapshot.getLong("aiUsageCount") ?: 0L
+                    userProjectionUpdates["aiUsageCount"] = aiUsageCount + 1
+                }
                 UserActionType.READING_CHECKIN -> {
                     userProjectionUpdates["readingCheckinCount"] = checkinCount + 1
 
@@ -155,6 +160,7 @@ class GamificationService(
         var ratedCount = 0L
         var finishedCount = 0L
         var messageCount = 0L
+        var aiUsageCount = 0L
         var checkinCount = 0L
         val checkinDates = mutableSetOf<LocalDate>()
         var latestCheckinDate: LocalDate? = null
@@ -169,6 +175,7 @@ class GamificationService(
                 UserActionType.RATE_BOOK -> ratedCount++
                 UserActionType.MARK_BOOK_AS_FINISHED -> finishedCount++
                 UserActionType.SEND_GROUP_MESSAGE -> messageCount++
+                UserActionType.USE_AI_RECOMMENDATION -> aiUsageCount++
                 UserActionType.READING_CHECKIN -> {
                     checkinCount++
                     val createdAt = doc.getTimestamp("createdAt")
@@ -189,6 +196,7 @@ class GamificationService(
                 "ratedBooksCount" to ratedCount,
                 "finishedBooksCount" to finishedCount,
                 "groupMessageCount" to messageCount,
+                "aiUsageCount" to aiUsageCount,
                 "readingCheckinCount" to checkinCount,
                 "currentStreak" to calculateCurrentStreak(checkinDates),
                 "lastCheckinEpochDay" to latestCheckinDate?.toEpochDay()
