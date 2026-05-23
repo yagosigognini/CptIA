@@ -34,6 +34,7 @@ object AchievementCatalog {
         UserActionType.RATE_BOOK -> initial.filter { it.type == AchievementType.RATINGS }
         UserActionType.SEND_GROUP_MESSAGE -> initial.filter { it.type == AchievementType.SOCIAL }
         UserActionType.READING_CHECKIN -> initial.filter { it.type == AchievementType.CONSISTENCY || it.id.startsWith("streak_") }
+        UserActionType.USE_AI_RECOMMENDATION -> initial.filter { it.type == AchievementType.AI }
         else -> emptyList()
     }
 }

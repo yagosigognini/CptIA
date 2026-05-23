@@ -10,6 +10,7 @@ import kotlinx.coroutines.tasks.await
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
+import java.time.temporal.ChronoUnit
 
 class GamificationService(
     private val db: FirebaseFirestore,
@@ -24,7 +25,8 @@ class GamificationService(
         UserActionType.RATE_BOOK to 10L,
         UserActionType.MARK_BOOK_AS_FINISHED to 50L,
         UserActionType.SEND_GROUP_MESSAGE to 5L,
-        UserActionType.READING_CHECKIN to 20L
+        UserActionType.READING_CHECKIN to 20L,
+        UserActionType.USE_AI_RECOMMENDATION to 15L
     )
 
     suspend fun processAction(
@@ -81,20 +83,45 @@ class GamificationService(
             } else {
                 gainedXpBase
             }
+            val userProjectionUpdates = mutableMapOf<String, Any>()
             if (gainedXp > 0) {
                 // `totalXp` é uma projeção agregada derivada da trilha em `user_actions`.
                 // Atualizamos por incremento para leitura rápida em perfil/ranking.
-                transaction.update(userRef, "totalXp", currentXp + gainedXp)
+                userProjectionUpdates["totalXp"] = currentXp + gainedXp
             }
 
             when (actionType) {
                 // Estes contadores são projeções derivadas de `user_actions` e podem ser
                 // recomputados pela rotina administrativa de reconciliação.
-                UserActionType.RATE_BOOK -> transaction.update(userRef, "ratedBooksCount", ratedCount + 1)
-                UserActionType.MARK_BOOK_AS_FINISHED -> transaction.update(userRef, "finishedBooksCount", finishedCount + 1)
-                UserActionType.SEND_GROUP_MESSAGE -> transaction.update(userRef, "groupMessageCount", messageCount + 1)
-                UserActionType.READING_CHECKIN -> transaction.update(userRef, "readingCheckinCount", checkinCount + 1)
+                UserActionType.RATE_BOOK -> userProjectionUpdates["ratedBooksCount"] = ratedCount + 1
+                UserActionType.MARK_BOOK_AS_FINISHED -> userProjectionUpdates["finishedBooksCount"] = finishedCount + 1
+                UserActionType.SEND_GROUP_MESSAGE -> userProjectionUpdates["groupMessageCount"] = messageCount + 1
+                UserActionType.USE_AI_RECOMMENDATION -> {
+                    val aiUsageCount = userSnapshot.getLong("aiUsageCount") ?: 0L
+                    userProjectionUpdates["aiUsageCount"] = aiUsageCount + 1
+                }
+                UserActionType.READING_CHECKIN -> {
+                    userProjectionUpdates["readingCheckinCount"] = checkinCount + 1
+
+                    val today = LocalDate.now(ZoneOffset.UTC)
+                    val lastCheckinEpochDay = userSnapshot.getLong("lastCheckinEpochDay")
+                    val currentStreak = userSnapshot.getLong("currentStreak") ?: 0L
+
+                    val nextStreak = when {
+                        lastCheckinEpochDay == null -> 1L
+                        lastCheckinEpochDay == today.toEpochDay() -> currentStreak
+                        lastCheckinEpochDay == today.minusDays(1).toEpochDay() -> currentStreak + 1L
+                        else -> 1L
+                    }
+
+                    userProjectionUpdates["currentStreak"] = nextStreak
+                    userProjectionUpdates["lastCheckinEpochDay"] = today.toEpochDay()
+                }
                 else -> Unit
+            }
+
+            if (userProjectionUpdates.isNotEmpty()) {
+                transaction.set(userRef, userProjectionUpdates, SetOptions.merge())
             }
 
             transaction.set(
@@ -133,8 +160,10 @@ class GamificationService(
         var ratedCount = 0L
         var finishedCount = 0L
         var messageCount = 0L
+        var aiUsageCount = 0L
         var checkinCount = 0L
         val checkinDates = mutableSetOf<LocalDate>()
+        var latestCheckinDate: LocalDate? = null
 
         actions.forEach { doc ->
             val actionName = doc.getString("actionType") ?: return@forEach
@@ -146,10 +175,16 @@ class GamificationService(
                 UserActionType.RATE_BOOK -> ratedCount++
                 UserActionType.MARK_BOOK_AS_FINISHED -> finishedCount++
                 UserActionType.SEND_GROUP_MESSAGE -> messageCount++
+                UserActionType.USE_AI_RECOMMENDATION -> aiUsageCount++
                 UserActionType.READING_CHECKIN -> {
                     checkinCount++
                     val createdAt = doc.getTimestamp("createdAt")
-                    createdAt?.toLocalDateUtc()?.let { checkinDates.add(it) }
+                    createdAt?.toLocalDateUtc()?.let {
+                        checkinDates.add(it)
+                        if (latestCheckinDate == null || it.isAfter(latestCheckinDate)) {
+                            latestCheckinDate = it
+                        }
+                    }
                 }
                 else -> Unit
             }
@@ -161,8 +196,10 @@ class GamificationService(
                 "ratedBooksCount" to ratedCount,
                 "finishedBooksCount" to finishedCount,
                 "groupMessageCount" to messageCount,
+                "aiUsageCount" to aiUsageCount,
                 "readingCheckinCount" to checkinCount,
-                "currentStreak" to calculateCurrentStreak(checkinDates)
+                "currentStreak" to calculateCurrentStreak(checkinDates),
+                "lastCheckinEpochDay" to latestCheckinDate?.toEpochDay()
             )
         ).await()
     }
@@ -180,8 +217,13 @@ class GamificationService(
 
     private fun calculateCurrentStreak(checkinDates: Set<LocalDate>): Long {
         if (checkinDates.isEmpty()) return 0L
+        val today = LocalDate.now(ZoneOffset.UTC)
+        val latestDate = checkinDates.maxOrNull() ?: return 0L
+        val daysSinceLatest = ChronoUnit.DAYS.between(latestDate, today)
+        if (daysSinceLatest > 1L) return 0L
+
         var streak = 0L
-        var cursor = LocalDate.now(ZoneOffset.UTC)
+        var cursor = latestDate
 
         while (checkinDates.contains(cursor)) {
             streak++

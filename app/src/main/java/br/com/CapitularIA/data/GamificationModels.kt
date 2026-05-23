@@ -6,6 +6,7 @@ import com.google.firebase.firestore.ServerTimestamp
 
 enum class UserActionType {
     LOGIN_APP,
+    USE_AI_RECOMMENDATION,
     SEND_GROUP_MESSAGE,
     RATE_BOOK,
     ADD_BOOK_TO_SHELF,
