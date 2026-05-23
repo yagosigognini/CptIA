@@ -46,7 +46,6 @@ import br.com.CapitularIA.data.ReadingStatus
 import br.com.CapitularIA.data.User
 import br.com.CapitularIA.data.UserTitle
 import br.com.CapitularIA.data.UserAchievement
-import br.com.CapitularIA.data.AchievementRarity
 import br.com.CapitularIA.services.AchievementCatalog
 import br.com.CapitularIA.data.sampleClubsList
 import br.com.CapitularIA.data.sampleRatedBooks
@@ -1024,7 +1023,6 @@ private fun AchievementsSection(achievements: List<UserAchievement>) {
                     Text("${item.icon} ${item.name}", fontWeight = FontWeight.SemiBold)
                     Text(item.description, style = MaterialTheme.typography.bodySmall)
                     Text("Critério: ${item.criteria}", style = MaterialTheme.typography.bodySmall)
-                    Text("Raridade: ${item.rarity.label()}", style = MaterialTheme.typography.bodySmall)
                     Text(if (unlocked) "Status: Desbloqueada" else "Status: Em progresso (${progress}/${item.requiredProgress})", style = MaterialTheme.typography.bodySmall)
                 }
             }
@@ -1032,10 +1030,3 @@ private fun AchievementsSection(achievements: List<UserAchievement>) {
     }
 }
 
-private fun AchievementRarity.label(): String = when (this) {
-    AchievementRarity.COMMON -> "⚪ Comum"
-    AchievementRarity.UNCOMMON -> "🟢 Incomum"
-    AchievementRarity.RARE -> "🔵 Rara"
-    AchievementRarity.EPIC -> "🟣 Épica"
-    AchievementRarity.LEGENDARY -> "🟡 Lendária"
-}
