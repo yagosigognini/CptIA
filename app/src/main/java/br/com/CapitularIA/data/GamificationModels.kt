@@ -70,6 +70,7 @@ data class AchievementDefinition(
     val criteria: String,
     val icon: String,
     val type: AchievementType,
+    val actionType: UserActionType? = null,
     val rarity: AchievementRarity = AchievementRarity.COMMON,
     val requiredProgress: Long
 )
